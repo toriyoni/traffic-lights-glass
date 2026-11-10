@@ -51,6 +51,15 @@ final class GlassGroupPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    // This panel deliberately never takes keyboard focus. AppKit otherwise
+    // treats its NSGlassEffectView as inactive and suppresses the native rim
+    // highlight, even while the window underneath is active. This appearance-
+    // only AppKit hook keeps the system glass fully rendered without making
+    // the panel key/main or drawing a replacement border. It is undocumented:
+    // if AppKit stops consulting it, the normal inactive material remains.
+    @objc(_hasActiveAppearance)
+    private func glassHasActiveAppearance() -> Bool { true }
+
     deinit {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }

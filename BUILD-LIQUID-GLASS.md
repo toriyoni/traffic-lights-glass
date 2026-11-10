@@ -2,7 +2,7 @@
 
 这是基于 [Traffic Lights+](https://github.com/Liu223344/traffic-light-plus) 的源码修改版。目标是在鼠标靠近红绿灯区域时，用同一块玻璃胶囊承载三个按钮，并让三个按钮一起平滑展开、收起。
 
-**交付状态：源码修改版，尚未在 macOS 上编译或实测。** 当前工作环境为 Linux，没有 AppKit / Xcode SDK。这里的源代码检查不能代替 Mac 上的 `swift test`、应用构建或交互验证；本包不包含已编译的 `.app`。
+**当前状态：已在本机 macOS 27.2.1 上构建并实测，90 项 Swift 测试通过。** 原生高光缺失的原因、对照截图及本机兼容办法见 [原生玻璃高光实验](docs/native-glass-highlight.md)。源码仍可按下列步骤自行构建。
 
 ## 本次修改
 
