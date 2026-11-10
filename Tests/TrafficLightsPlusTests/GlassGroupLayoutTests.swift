@@ -74,9 +74,18 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     var state = GlassGroupRevealState()
     let native = CGRect(x: 10, y: 10, width: 54, height: 14)
     let expanded = CGRect(x: 8, y: 8, width: 116, height: 44)
-    #expect(!state.desiredVisibility(pointer: CGPoint(x: 100, y: 24), nativeRegion: native, expandedRegion: expanded, now: 0))
-    #expect(state.desiredVisibility(pointer: CGPoint(x: 15, y: 15), nativeRegion: native, expandedRegion: expanded, now: 1))
-    #expect(state.desiredVisibility(pointer: CGPoint(x: 100, y: 24), nativeRegion: native, expandedRegion: expanded, now: 1.1))
+    let visibleBeforeApproach = state.desiredVisibility(
+        pointer: CGPoint(x: 100, y: 24), nativeRegion: native, expandedRegion: expanded, now: 0
+    )
+    #expect(!visibleBeforeApproach)
+    let visibleAtNativeButton = state.desiredVisibility(
+        pointer: CGPoint(x: 15, y: 15), nativeRegion: native, expandedRegion: expanded, now: 1
+    )
+    #expect(visibleAtNativeButton)
+    let visibleInsideCapsule = state.desiredVisibility(
+        pointer: CGPoint(x: 100, y: 24), nativeRegion: native, expandedRegion: expanded, now: 1.1
+    )
+    #expect(visibleInsideCapsule)
     #expect(state.isEngaged)
     #expect(!state.isWaitingToCollapse)
 }
@@ -86,14 +95,32 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     let region = CGRect(x: 0, y: 0, width: 100, height: 50)
     let inside = CGPoint(x: 20, y: 20)
     let outside = CGPoint(x: 200, y: 200)
-    #expect(state.desiredVisibility(pointer: inside, nativeRegion: region, expandedRegion: region, now: 1))
-    #expect(state.desiredVisibility(pointer: outside, nativeRegion: region, expandedRegion: region, now: 2))
+    let visibleOnEntry = state.desiredVisibility(
+        pointer: inside, nativeRegion: region, expandedRegion: region, now: 1
+    )
+    #expect(visibleOnEntry)
+    let visibleOnFirstExit = state.desiredVisibility(
+        pointer: outside, nativeRegion: region, expandedRegion: region, now: 2
+    )
+    #expect(visibleOnFirstExit)
     #expect(state.isWaitingToCollapse)
-    #expect(state.desiredVisibility(pointer: inside, nativeRegion: region, expandedRegion: region, now: 2.05))
+    let visibleOnReentry = state.desiredVisibility(
+        pointer: inside, nativeRegion: region, expandedRegion: region, now: 2.05
+    )
+    #expect(visibleOnReentry)
     #expect(!state.isWaitingToCollapse)
-    #expect(state.desiredVisibility(pointer: outside, nativeRegion: region, expandedRegion: region, now: 3))
-    #expect(state.desiredVisibility(pointer: outside, nativeRegion: region, expandedRegion: region, now: 3.09))
-    #expect(!state.desiredVisibility(pointer: outside, nativeRegion: region, expandedRegion: region, now: 3.11))
+    let visibleOnSecondExit = state.desiredVisibility(
+        pointer: outside, nativeRegion: region, expandedRegion: region, now: 3
+    )
+    #expect(visibleOnSecondExit)
+    let visibleDuringGracePeriod = state.desiredVisibility(
+        pointer: outside, nativeRegion: region, expandedRegion: region, now: 3.09
+    )
+    #expect(visibleDuringGracePeriod)
+    let visibleAfterGracePeriod = state.desiredVisibility(
+        pointer: outside, nativeRegion: region, expandedRegion: region, now: 3.11
+    )
+    #expect(!visibleAfterGracePeriod)
     #expect(!state.isEngaged)
     #expect(!state.isWaitingToCollapse)
 }
@@ -122,15 +149,30 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     let native = CGRect(x: 10, y: 10, width: 54, height: 14)
     let expanded = CGRect(x: 8, y: 8, width: 116, height: 44)
     let expandedOnlyPoint = CGPoint(x: 100, y: 30)
-    #expect(state.desiredVisibility(pointer: CGPoint(x: 15, y: 15), nativeRegion: native, expandedRegion: expanded, now: 1))
+    let visibleAtNativeButton = state.desiredVisibility(
+        pointer: CGPoint(x: 15, y: 15), nativeRegion: native, expandedRegion: expanded, now: 1
+    )
+    #expect(visibleAtNativeButton)
     state.advance(visible: true, elapsed: 0.24, reduceMotion: false)
-    #expect(state.desiredVisibility(pointer: CGPoint(x: 200, y: 200), nativeRegion: native, expandedRegion: expanded, now: 2))
-    #expect(!state.desiredVisibility(pointer: CGPoint(x: 200, y: 200), nativeRegion: native, expandedRegion: expanded, now: 2.11))
+    let visibleOnExit = state.desiredVisibility(
+        pointer: CGPoint(x: 200, y: 200), nativeRegion: native, expandedRegion: expanded, now: 2
+    )
+    #expect(visibleOnExit)
+    let visibleAfterGracePeriod = state.desiredVisibility(
+        pointer: CGPoint(x: 200, y: 200), nativeRegion: native, expandedRegion: expanded, now: 2.11
+    )
+    #expect(!visibleAfterGracePeriod)
     state.advance(visible: false, elapsed: 0.09, reduceMotion: false)
     #expect(state.progress > 0)
-    #expect(state.desiredVisibility(pointer: expandedOnlyPoint, nativeRegion: native, expandedRegion: expanded, now: 2.2))
+    let visibleOnReentry = state.desiredVisibility(
+        pointer: expandedOnlyPoint, nativeRegion: native, expandedRegion: expanded, now: 2.2
+    )
+    #expect(visibleOnReentry)
     state.reset()
-    #expect(!state.desiredVisibility(pointer: expandedOnlyPoint, nativeRegion: native, expandedRegion: expanded, now: 3))
+    let visibleWhenFullyHidden = state.desiredVisibility(
+        pointer: expandedOnlyPoint, nativeRegion: native, expandedRegion: expanded, now: 3
+    )
+    #expect(!visibleWhenFullyHidden)
 }
 
 @Test func alwaysVisibleModeClearsPendingExitSoTheAnimationTimerCanStop() {

@@ -153,7 +153,7 @@ final class GlassGroupPanel: NSPanel {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
-            glass.style = .regular
+            glass.style = .clear
             glass.cornerRadius = 999
             glass.tintColor = nil
             // Apple's glass compositor expects content here, not in a sibling.

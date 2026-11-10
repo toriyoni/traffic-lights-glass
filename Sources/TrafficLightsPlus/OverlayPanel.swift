@@ -62,8 +62,8 @@ final class OverlayButtonView: NSView {
 
     override var isFlipped: Bool { true }
 
-    override func acceptsFirstMouse(with event: NSEvent?) -> Bool {
-        style == .liquidGlass || super.acceptsFirstMouse(with: event)
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        style == .liquidGlass || super.acceptsFirstMouse(for: event)
     }
 
     override func updateTrackingAreas() {

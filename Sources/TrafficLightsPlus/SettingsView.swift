@@ -117,12 +117,13 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var previewButtons: some View {
         let size = CGFloat(preferences.size)
         let spacing: CGFloat = preferences.style == .edgeSquares
             ? 0
             : (preferences.style == .liquidGlass ? 8 : max(-size + 4, 8 + CGFloat(preferences.spacing)))
-        return HStack(spacing: spacing) {
+        let buttons = HStack(spacing: spacing) {
             PreviewControl(
                 action: .close,
                 behavior: preferences.closeBehavior,
@@ -149,7 +150,8 @@ struct SettingsView: View {
                 .frame(width: size, height: size)
         }
         .padding(preferences.style == .liquidGlass ? 8 : 0)
-        .background {
+
+        let fallback = buttons.background {
             if preferences.style == .liquidGlass {
                 Capsule()
                     .fill(.regularMaterial)
@@ -158,6 +160,16 @@ struct SettingsView: View {
                     }
             }
         }
+
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), preferences.style == .liquidGlass {
+            buttons.glassEffect(.clear, in: Capsule())
+        } else {
+            fallback
+        }
+        #else
+        fallback
+        #endif
     }
 
     private var controls: some View {

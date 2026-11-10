@@ -18,9 +18,6 @@ esac
 
 TRIPLE="$TARGET_ARCH-apple-macosx13.0"
 SCRATCH="$ROOT/.build/$TARGET_ARCH"
-APP_BINARY="$SCRATCH/$TARGET_ARCH-apple-macosx/release/TrafficLightsPlus"
-RESOURCE_BUNDLE="$SCRATCH/$TARGET_ARCH-apple-macosx/release/TrafficLightsPlus_TrafficLightsPlus.bundle"
-SPARKLE_FRAMEWORK="$SCRATCH/$TARGET_ARCH-apple-macosx/release/Sparkle.framework"
 AD_HOC_ENTITLEMENTS="$ROOT/Resources/TrafficLightsPlus.ad-hoc.entitlements"
 
 case "$TARGET_ARCH" in
@@ -35,12 +32,19 @@ esac
 cd "$ROOT"
 export CLANG_MODULE_CACHE_PATH="$ROOT/.build/ModuleCache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$ROOT/.build/ModuleCache"
-swift build -c release \
-    --triple "$TRIPLE" \
-    --scratch-path "$SCRATCH" \
-    --disable-automatic-resolution \
-    --disable-sandbox \
+BUILD_OPTIONS=(
+    -c release
+    --triple "$TRIPLE"
+    --scratch-path "$SCRATCH"
+    --disable-automatic-resolution
+    --disable-sandbox
     --cache-path "$ROOT/.build/SwiftPMCache"
+)
+swift build "${BUILD_OPTIONS[@]}"
+BUILD_PRODUCTS="$(swift build "${BUILD_OPTIONS[@]}" --show-bin-path)"
+APP_BINARY="$BUILD_PRODUCTS/TrafficLightsPlus"
+RESOURCE_BUNDLE="$BUILD_PRODUCTS/TrafficLightsPlus_TrafficLightsPlus.bundle"
+SPARKLE_FRAMEWORK="$BUILD_PRODUCTS/Sparkle.framework"
 
 lipo "$APP_BINARY" -verify_arch "$TARGET_ARCH"
 if [[ ! -d "$RESOURCE_BUNDLE" ]]; then

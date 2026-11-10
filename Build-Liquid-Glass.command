@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Personal source build: keep the original app and its updater configuration intact.
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP="$ROOT/build/Traffic Lights Glass.app"
+APP="${APP_OUTPUT:-$ROOT/build/Traffic Lights Glass.app}"
 BUNDLE_ID="app.trafficlightsplus.glass.local"
 PROBE_DIRECTORY=""
 
@@ -26,7 +26,7 @@ fi
 
 SWIFT_EXECUTABLE="$(xcrun --find swift)"
 SWIFTC_EXECUTABLE="$(xcrun --find swiftc)"
-export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
 export PATH="$(dirname "$SWIFT_EXECUTABLE"):$PATH"
 PROBE_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/traffic-lights-glass.XXXXXX")"
 
@@ -40,7 +40,7 @@ import AppKit
 @available(macOS 26.0, *)
 func verifyGlassSDK() {
     let glass = NSGlassEffectView()
-    glass.style = .regular
+    glass.style = .clear
     glass.cornerRadius = 999
     glass.tintColor = nil
     glass.contentView = NSView()
@@ -56,7 +56,7 @@ fi
 
 cd "$ROOT"
 echo "正在运行 Swift 测试…"
-"$SWIFT_EXECUTABLE" test
+"$SWIFT_EXECUTABLE" test "$@"
 
 echo "正在构建 Traffic Lights Glass…"
 APP_OUTPUT="$APP" SIGNING_IDENTITY=- /bin/zsh "$ROOT/scripts/build-app.sh"
