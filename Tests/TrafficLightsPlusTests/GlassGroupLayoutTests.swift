@@ -125,61 +125,74 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     #expect(!state.isWaitingToCollapse)
 }
 
-@Test func glassSpringPopsPastRestingSizeThenSettlesAndStops() {
+@Test func glassEaseOutStartsFastThenSlowsWithoutOvershooting() {
     var state = GlassGroupRevealState()
     state.advance(visible: true, elapsed: 0, reduceMotion: false)
     #expect(state.isAnimating)
     #expect(state.progress == 0)
-    var peak: CGFloat = 0
-    var crossedTargetWhileMoving = false
+    var previous: CGFloat = 0
+    var previousStep = CGFloat.infinity
     for _ in 0..<60 {
         state.advance(visible: true, elapsed: 1.0 / 60, reduceMotion: false)
-        peak = max(peak, state.progress)
-        if state.progress > 1, state.velocity > 0 {
-            crossedTargetWhileMoving = true
-            #expect(state.isAnimating)
-        }
+        let step = state.progress - previous
+        #expect(step >= 0)
+        #expect(step <= previousStep + 0.0000001)
+        #expect(state.progress <= 1)
+        previous = state.progress
+        previousStep = step
     }
-    #expect(crossedTargetWhileMoving)
-    #expect(peak > 1.12 && peak < 1.20)
     #expect(state.progress == 1)
     #expect(state.velocity == 0)
     #expect(!state.isAnimating)
 
-    var previous = state.progress
+    previous = state.progress
+    previousStep = .infinity
     for _ in 0..<60 {
         state.advance(visible: false, elapsed: 1.0 / 60, reduceMotion: false)
-        #expect(state.progress <= previous)
+        let step = previous - state.progress
+        #expect(step >= 0)
+        #expect(step <= previousStep + 0.0000001)
         #expect(state.progress >= 0)
         previous = state.progress
+        previousStep = step
     }
     #expect(state.progress == 0)
     #expect(!state.isAnimating)
+
+    var response = GlassGroupRevealState()
+    response.advance(visible: true, elapsed: 0.08, reduceMotion: false)
+    #expect(response.progress > 0.65 && response.progress < 0.8)
+    response.advance(visible: true, elapsed: 0.08, reduceMotion: false)
+    #expect(response.progress > 0.95 && response.progress < 1)
+    response.advance(visible: true, elapsed: 0.08, reduceMotion: false)
+    #expect(response.progress == 1)
+    #expect(!response.isAnimating)
 }
 
-@Test func glassSpringRetargetingPreservesPositionAndMomentum() {
+@Test func glassEaseOutRetargetingPreservesPositionAndImmediatelyChangesDirection() {
     var state = GlassGroupRevealState()
     state.advance(visible: true, elapsed: 0.07, reduceMotion: false)
     let opening = state
     #expect(opening.velocity > 0)
     state.advance(visible: false, elapsed: 0, reduceMotion: false)
     #expect(state.progress == opening.progress)
-    #expect(state.velocity == opening.velocity)
+    #expect(state.velocity < 0)
     state.advance(visible: false, elapsed: 0.08, reduceMotion: false)
     let closing = state
+    #expect(closing.progress < opening.progress)
     #expect(closing.velocity < 0)
     state.advance(visible: true, elapsed: 0, reduceMotion: false)
     #expect(state.progress == closing.progress)
-    #expect(state.velocity == closing.velocity)
+    #expect(state.velocity > 0)
     state.advance(visible: true, elapsed: 1.0 / 240, reduceMotion: false)
-    #expect(abs(state.progress - closing.progress) < 0.05)
-    #expect(state.progress < closing.progress)
+    #expect(abs(state.progress - closing.progress) < 0.06)
+    #expect(state.progress > closing.progress)
     for _ in 0..<60 { state.advance(visible: true, elapsed: 1.0 / 60, reduceMotion: false) }
     #expect(state.progress == 1)
     #expect(!state.isAnimating)
 }
 
-@Test func glassSpringProducesTheSameMotionAcrossFrameRatesAndDroppedFrames() {
+@Test func glassEaseOutProducesTheSameMotionAcrossFrameRatesAndDroppedFrames() {
     var uninterrupted = GlassGroupRevealState()
     uninterrupted.advance(visible: true, elapsed: 0.2, reduceMotion: false)
     for rate in [30, 60, 120] {
@@ -198,12 +211,15 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     #expect(abs(interrupted.velocity - uninterrupted.velocity) < 0.0000001)
 }
 
-@Test func rapidGlassSpringReversalsStayBoundedAndCanFinishClosing() {
+@Test func rapidGlassEaseOutReversalsStayMonotonicAndCanFinishClosing() {
     var state = GlassGroupRevealState()
     for frame in 0..<240 {
-        state.advance(visible: (frame / 5) % 2 == 0, elapsed: 1.0 / 60, reduceMotion: false)
+        let visible = (frame / 5) % 2 == 0
+        let previous = state.progress
+        state.advance(visible: visible, elapsed: 1.0 / 60, reduceMotion: false)
         #expect(state.progress.isFinite && state.velocity.isFinite)
-        #expect(state.progress >= 0 && state.progress <= GlassGroupRevealState.maximumProgress)
+        #expect(state.progress >= 0 && state.progress <= 1)
+        #expect(visible ? state.progress >= previous : state.progress <= previous)
     }
     for _ in 0..<60 { state.advance(visible: false, elapsed: 1.0 / 60, reduceMotion: false) }
     #expect(state.progress == 0)
@@ -211,7 +227,7 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     #expect(!state.isAnimating)
 }
 
-@Test func glassSpringRespectsReducedMotionAndClearsMomentumOnReset() {
+@Test func glassEaseOutRespectsReducedMotionAndClearsMotionOnReset() {
     var state = GlassGroupRevealState()
     state.advance(visible: true, elapsed: 0.12, reduceMotion: false)
     state.advance(visible: true, elapsed: 0, reduceMotion: true)
@@ -234,7 +250,7 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     #expect(!state.isEngaged)
 }
 
-@Test func invalidElapsedTimeDoesNotCorruptTheGlassSpring() {
+@Test func invalidElapsedTimeDoesNotCorruptTheGlassEaseOut() {
     var state = GlassGroupRevealState()
     state.advance(visible: true, elapsed: 0.07, reduceMotion: false)
     let previous = state
@@ -249,14 +265,14 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
 }
 
 @Test(arguments: [CGFloat(18), 24, 28, 48])
-func glassSpringGeometryKeepsOvershootAndDistinctButtonsInsideWindow(size: CGFloat) throws {
+func glassEaseOutGeometryBoundsSizesAndKeepsDistinctButtonsInsideWindow(size: CGFloat) throws {
     let window = CGRect(x: -800, y: -200, width: 800, height: 600)
     for atRightEdge in [false, true] {
         let native = glassNativeFrames.mapValues {
             $0.offsetBy(dx: window.minX + (atRightEdge ? 720 : 0), dy: window.minY)
         }
         let expanded = GlassGroupLayout.expandedFrames(nativeFrames: native, controlSize: size, windowFrame: window)
-        for progress: CGFloat in [0, 0.3, 0.8, 1, 1.16, GlassGroupRevealState.maximumProgress] {
+        for progress: CGFloat in [-0.2, 0, 0.3, 0.8, 1, 1.16, 2] {
             let presentation = try #require(GlassGroupLayout.presentation(
                 nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
             ))
@@ -269,15 +285,15 @@ func glassSpringGeometryKeepsOvershootAndDistinctButtonsInsideWindow(size: CGFlo
             #expect(!close.intersects(minimize))
             #expect(!minimize.intersects(zoom))
             #expect(close.width == close.height)
-            if progress == 0 { #expect(presented == native) }
-            if progress == 1 { #expect(presented == expanded) }
-            if progress > 1 { #expect(close.width > size) }
+            #expect(close.width <= size)
+            if progress <= 0 { #expect(presented == native) }
+            if progress >= 1 { #expect(presented == expanded) }
         }
     }
 }
 
 @Test(arguments: [CGFloat(18), 24, 28, 48])
-func glassBounceKeepsItsRestingCenterOnBothWindowEdges(size: CGFloat) throws {
+func glassEaseOutCentersFollowMonotonicPathsOnBothWindowEdges(size: CGFloat) throws {
     let window = CGRect(x: -800.25, y: -200.75, width: 800, height: 600)
     for atRightEdge in [false, true] {
         let native = glassNativeFrames.mapValues {
@@ -288,27 +304,45 @@ func glassBounceKeepsItsRestingCenterOnBothWindowEdges(size: CGFloat) throws {
         let host = try #require(GlassGroupLayout.presentationEnvelope(
             nativeFrames: native, expandedFrames: expanded, windowFrame: window
         ))
-        for progress: CGFloat in [0.9, 1, 1.16, 1.08, 1.02, 0.98, 0.99, 1.002, 1.001, 1, GlassGroupRevealState.maximumProgress] {
+        var previous = native
+        var state = GlassGroupRevealState()
+        for _ in 0..<60 {
+            state.advance(visible: true, elapsed: 1.0 / 120, reduceMotion: false)
             let presentation = try #require(GlassGroupLayout.presentation(
-                nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
+                nativeFrames: native, expandedFrames: expanded, progress: state.progress, windowFrame: window
             ))
             let capsule = presentation.capsuleFrame
-            #expect(abs(capsule.midX - resting.midX) < 0.000001)
-            #expect(abs(capsule.midY - resting.midY) < 0.000001)
             #expect(window.contains(capsule))
             #expect(host.insetBy(dx: -0.000001, dy: -0.000001).contains(capsule))
-            if progress > 1 { #expect(capsule.width > resting.width) }
+            #expect(capsule.width <= resting.width + 0.000001)
+            for action in WindowAction.allCases {
+                let start = try #require(native[action])
+                let end = try #require(expanded[action])
+                let before = try #require(previous[action])
+                let current = try #require(presentation.buttonFrames[action])
+                // Individual targets must not briefly reverse even if the
+                // capsule's overall size is monotonic.
+                for (initial, target, last, value) in [
+                    (start.midX, end.midX, before.midX, current.midX),
+                    (start.midY, end.midY, before.midY, current.midY)
+                ] {
+                    #expect(value >= min(initial, target) - 0.000001)
+                    #expect(value <= max(initial, target) + 0.000001)
+                    #expect((value - last) * (target - initial) >= -0.000001)
+                }
+            }
+            previous = presentation.buttonFrames
         }
+        #expect(previous == expanded)
     }
 }
 
 @MainActor
 @Test(arguments: [CGFloat(24), 48])
-func glassPanelDoesNotRoundItsCenterWhenTheSpringSettles(size: CGFloat) throws {
+func glassPanelDoesNotRoundItsCenterDuringEaseOut(size: CGFloat) throws {
     let window = CGRect(x: 600.25, y: 400.5, width: 800, height: 600)
     let native = glassNativeFrames.mapValues { $0.offsetBy(dx: window.minX, dy: window.minY) }
     let expanded = GlassGroupLayout.expandedFrames(nativeFrames: native, controlSize: size, windowFrame: window)
-    let resting = try #require(GlassGroupLayout.capsuleFrame(buttonFrames: expanded))
     let host = try #require(GlassGroupLayout.presentationEnvelope(
         nativeFrames: native, expandedFrames: expanded, windowFrame: window
     ))
@@ -316,7 +350,7 @@ func glassPanelDoesNotRoundItsCenterWhenTheSpringSettles(size: CGFloat) throws {
     panel.ignoresMouseEvents = true
     defer { panel.orderOut(nil) }
     var windowFrame: CGRect?
-    for progress: CGFloat in [0.01, 0.1, 0.25, 0.5, 0.8, 0.9, 1.16, 1.08, 1.02, 0.98, 0.99, 1.002, 1.001, 1] {
+    for progress: CGFloat in [0.01, 0.1, 0.25, 0.5, 0.8, 0.9, 0.95, 0.98, 0.99, 0.995, 0.999, 1] {
         let presentation = try #require(GlassGroupLayout.presentation(
             nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
         ))
@@ -328,10 +362,8 @@ func glassPanelDoesNotRoundItsCenterWhenTheSpringSettles(size: CGFloat) throws {
         windowFrame = panel.frame
         let material = try #require(panel.contentView?.subviews.last)
         let visible = panel.convertToScreen(material.convert(material.bounds, to: nil))
-        if progress >= 0.9 {
-            #expect(abs(visible.midX - resting.midX) < 0.000001)
-            #expect(abs(visible.midY - resting.midY) < 0.000001)
-        }
+        #expect(abs(visible.midX - presentation.capsuleFrame.midX) < 0.000001)
+        #expect(abs(visible.midY - presentation.capsuleFrame.midY) < 0.000001)
         for (action, view) in panel.buttonViews {
             let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: panel.contentView)
             #expect(panel.contentView?.hitTest(center) === view)

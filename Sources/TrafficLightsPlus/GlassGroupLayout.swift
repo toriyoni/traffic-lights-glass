@@ -66,8 +66,8 @@ struct GlassGroupLayout {
         let capsuleFrame: CGRect
     }
 
-    /// Size may overshoot, but the center finishes its approach before the
-    /// bounce. Returning below 1 during settling must not move the center again.
+    /// Interpolate position and size together so every button travels directly
+    /// toward its target. Timing is eased once by GlassGroupRevealState.
     static func presentation(
         nativeFrames: [WindowAction: CGRect],
         expandedFrames: [WindowAction: CGRect],
@@ -75,42 +75,9 @@ struct GlassGroupLayout {
         windowFrame: CGRect
     ) -> Presentation? {
         guard isUsable(windowFrame), progress.isFinite else { return nil }
-        let expanded = expandedFrames.filter { action, frame in
-            isUsable(frame) && nativeFrames[action].map(isUsable) == true
-        }
-        let native = nativeFrames.filter { expanded[$0.key] != nil }
-        guard let start = capsuleFrame(buttonFrames: native, padding: 0),
-              let end = capsuleFrame(buttonFrames: expanded) else { return nil }
-        var amount = min(GlassGroupRevealState.maximumProgress, max(0, progress))
-
-        // Near a window edge, ease the overshoot toward the space available
-        // around the resting center. Pushing the capsule sideways each frame
-        // would reintroduce the very wobble that anchoring is meant to prevent.
-        if amount > 1 {
-            let horizontalRoom = 2 * min(end.midX - windowFrame.minX, windowFrame.maxX - end.midX)
-            let verticalRoom = 2 * min(end.midY - windowFrame.minY, windowFrame.maxY - end.midY)
-            let widthGrowth = end.width - start.width
-            let heightGrowth = end.height - start.height
-            var limit = CGFloat.infinity
-            if widthGrowth > 0 { limit = min(limit, max(0, horizontalRoom - end.width) / widthGrowth) }
-            if heightGrowth > 0 { limit = min(limit, max(0, verticalRoom - end.height) / heightGrowth) }
-            if limit == 0 {
-                amount = 1
-            } else if limit.isFinite, amount - 1 > limit * 0.75 {
-                let shoulder = limit * 0.75
-                let remaining = limit - shoulder
-                amount = 1 + shoulder + remaining * tanh((amount - 1 - shoulder) / remaining)
-            }
-        }
-
-        let approach = min(amount / 0.9, 1)
-        let placement = approach * approach * (3 - 2 * approach)
-        let center = CGPoint(
-            x: start.midX + (end.midX - start.midX) * placement,
-            y: start.midY + (end.midY - start.midY) * placement
-        )
+        let amount = min(1, max(0, progress))
         var result: [WindowAction: CGRect] = [:]
-        for (action, expanded) in expanded {
+        for (action, expanded) in expandedFrames {
             guard let native = nativeFrames[action], isUsable(native), isUsable(expanded) else { continue }
             result[action] = CGRect(
                 x: native.minX + (expanded.minX - native.minX) * amount,
@@ -119,21 +86,19 @@ struct GlassGroupLayout {
                 height: native.height + (expanded.height - native.height) * amount
             )
         }
-        guard let interpolated = capsuleFrame(buttonFrames: result, padding: padding * amount) else { return nil }
-        var offset = CGPoint(x: center.x - interpolated.midX, y: center.y - interpolated.midY)
-        let centered = interpolated.offsetBy(dx: offset.x, dy: offset.y)
+        guard let capsule = capsuleFrame(buttonFrames: result, padding: padding * amount) else { return nil }
+        var offset = CGPoint.zero
 
-        // Keep the initial approach inside the window as well. Once the center
-        // is at rest, the limited overshoot above already fits without shifting.
-        if centered.width <= windowFrame.width {
-            offset.x += min(max(centered.minX, windowFrame.minX), windowFrame.maxX - centered.width) - centered.minX
+        // Keep the group inside a normal window without squashing its buttons.
+        if capsule.width <= windowFrame.width {
+            offset.x = min(max(capsule.minX, windowFrame.minX), windowFrame.maxX - capsule.width) - capsule.minX
         }
-        if centered.height <= windowFrame.height {
-            offset.y += min(max(centered.minY, windowFrame.minY), windowFrame.maxY - centered.height) - centered.minY
+        if capsule.height <= windowFrame.height {
+            offset.y = min(max(capsule.minY, windowFrame.minY), windowFrame.maxY - capsule.height) - capsule.minY
         }
         return Presentation(
             buttonFrames: result.mapValues { $0.offsetBy(dx: offset.x, dy: offset.y) },
-            capsuleFrame: interpolated.offsetBy(dx: offset.x, dy: offset.y)
+            capsuleFrame: capsule.offsetBy(dx: offset.x, dy: offset.y)
         )
     }
 
@@ -143,13 +108,9 @@ struct GlassGroupLayout {
         expandedFrames: [WindowAction: CGRect],
         windowFrame: CGRect
     ) -> CGRect? {
-        guard let resting = capsuleFrame(buttonFrames: expandedFrames) else { return nil }
+        guard isUsable(windowFrame), let resting = capsuleFrame(buttonFrames: expandedFrames) else { return nil }
         let native = capsuleFrame(buttonFrames: nativeFrames) ?? resting
-        let peak = presentation(
-            nativeFrames: nativeFrames, expandedFrames: expandedFrames,
-            progress: GlassGroupRevealState.maximumProgress, windowFrame: windowFrame
-        )?.capsuleFrame ?? resting
-        return resting.union(native).union(peak)
+        return resting.union(native)
     }
 
     private static func isUsable(_ frame: CGRect) -> Bool {
@@ -160,15 +121,19 @@ struct GlassGroupLayout {
     }
 }
 
-/// One spring drives the glass and all buttons. Reversing direction preserves
-/// position and velocity; a short exit grace avoids collapse near an edge.
+/// One ease-out drives the glass and all buttons. Retargeting starts at the
+/// current position; a short exit grace avoids collapse near an edge.
 struct GlassGroupRevealState {
     static let exitGrace: TimeInterval = 0.10
-    static let maximumProgress: CGFloat = 1.24
+    static let expandDuration: TimeInterval = 0.24
+    static let collapseDuration: TimeInterval = 0.18
 
     private(set) var progress: CGFloat = 0
     private(set) var velocity: CGFloat = 0
     private var target: CGFloat = 0
+    private var startProgress: CGFloat = 0
+    private var animationElapsed: TimeInterval = 0
+    private var animationDuration: TimeInterval = 0
     private(set) var isEngaged = false
     private(set) var exitStartedAt: TimeInterval?
 
@@ -220,7 +185,17 @@ struct GlassGroupRevealState {
         reduceMotion: Bool,
         alwaysVisible: Bool = false
     ) {
-        target = alwaysVisible || visible ? 1 : 0
+        let nextTarget: CGFloat = alwaysVisible || visible ? 1 : 0
+        if nextTarget != target {
+            target = nextTarget
+            startProgress = progress
+            animationElapsed = 0
+            // Short reversals should not replay the full duration. Start from
+            // the visible size and immediately head toward the new target.
+            let distance = abs(target - progress)
+            animationDuration = (visible ? Self.expandDuration : Self.collapseDuration) * sqrt(Double(distance))
+            velocity = animationDuration > 0 ? 3 * (target - progress) / CGFloat(animationDuration) : 0
+        }
         if alwaysVisible {
             isEngaged = false
             exitStartedAt = nil
@@ -228,62 +203,31 @@ struct GlassGroupRevealState {
         if alwaysVisible || reduceMotion {
             progress = target
             velocity = 0
+            animationElapsed = animationDuration
             return
         }
         guard elapsed.isFinite, elapsed > 0, isAnimating else { return }
-        if elapsed >= 1 {
+        animationElapsed = min(animationElapsed + elapsed, animationDuration)
+        guard animationDuration > 0, animationElapsed < animationDuration else {
             progress = target
             velocity = 0
             return
         }
 
-        let time = CGFloat(elapsed)
-        let displacement = progress - target
-        let nextDisplacement: CGFloat
-        if visible {
-            // An underdamped reveal peaks at about 165 ms, then softly settles.
-            // Solve the spring analytically so dropped frames don't change it.
-            let frequency: CGFloat = 22
-            let decay = frequency * 0.5
-            let dampedFrequency = sqrt(frequency * frequency - decay * decay)
-            let envelope = exp(-decay * time)
-            let cosine = cos(dampedFrequency * time)
-            let sine = sin(dampedFrequency * time)
-            nextDisplacement = envelope * (
-                displacement * cosine + (velocity + decay * displacement) / dampedFrequency * sine
-            )
-            velocity = envelope * (
-                velocity * cosine - (decay * velocity + frequency * frequency * displacement) / dampedFrequency * sine
-            )
-        } else {
-            // A critically damped return feels quick and doesn't bounce back
-            // into view. Retargeting still carries the current momentum.
-            let frequency: CGFloat = 30
-            let coefficient = velocity + frequency * displacement
-            let envelope = exp(-frequency * time)
-            nextDisplacement = (displacement + coefficient * time) * envelope
-            velocity = (velocity - frequency * coefficient * time) * envelope
-        }
-        progress = target + nextDisplacement
-        if progress <= 0 {
-            progress = 0
-            velocity = max(0, velocity)
-        } else if progress >= Self.maximumProgress {
-            progress = Self.maximumProgress
-            velocity = min(0, velocity)
-        }
-        // Check speed as well as distance: crossing the resting size is not
-        // the end of the bounce. Snap only the imperceptible remaining tail.
-        if abs(progress - target) < 0.001, abs(velocity) < 0.02 {
-            progress = target
-            velocity = 0
-        }
+        // Cubic ease-out: fast initial response, continuously decreasing speed,
+        // and exactly zero speed at the endpoint. No overshoot or oscillation.
+        let remaining = CGFloat(1 - animationElapsed / animationDuration)
+        progress = target + (startProgress - target) * remaining * remaining * remaining
+        velocity = 3 * (target - startProgress) * remaining * remaining / CGFloat(animationDuration)
     }
 
     mutating func reset() {
         progress = 0
         velocity = 0
         target = 0
+        startProgress = 0
+        animationElapsed = 0
+        animationDuration = 0
         isEngaged = false
         exitStartedAt = nil
     }

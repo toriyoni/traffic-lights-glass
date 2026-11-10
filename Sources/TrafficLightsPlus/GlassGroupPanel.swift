@@ -84,7 +84,7 @@ final class GlassGroupPanel: NSPanel {
 
         let visibleProgress = min(1, max(0, progress))
         // AppKit rounds top-level window frames. Resizing that window on every
-        // spring frame shifts the visible center by up to a point, even when
+        // animation frame shifts the visible center by up to a point, even when
         // the requested center is constant. Animate views in a stationary host.
         let hostFrame = containerFrame.flatMap { Self.isValid($0) ? $0 : nil } ?? capsuleFrame
         let integralHost = hostFrame.union(capsuleFrame).integral

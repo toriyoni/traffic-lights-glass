@@ -630,8 +630,8 @@ final class WindowOverlay {
             var capsule = GlassGroupLayout.capsuleFrame(
                 buttonFrames: appKitControlFrames(actions: availableActions)
             )
-            // The pointer can rest on the briefly larger, bouncing capsule.
-            // Keep it engaged using the live frame as well as the resting one.
+            // Keep the visible capsule engaged during a transition as well as
+            // at rest, so re-entry can reverse a partially completed collapse.
             if glassPanel.isVisible, let liveCapsule = glassPanel.presentedCapsuleFrame {
                 capsule = capsule.map { $0.union(liveCapsule) } ?? liveCapsule
             }
