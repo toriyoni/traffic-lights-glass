@@ -163,7 +163,7 @@ struct SettingsView: View {
 
         #if compiler(>=6.2)
         if #available(macOS 26.0, *), preferences.style == .liquidGlass {
-            buttons.glassEffect(.clear, in: Capsule())
+            buttons.glassEffect(.regular, in: Capsule())
         } else {
             fallback
         }

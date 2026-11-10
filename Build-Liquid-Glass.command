@@ -40,7 +40,7 @@ import AppKit
 @available(macOS 26.0, *)
 func verifyGlassSDK() {
     let glass = NSGlassEffectView()
-    glass.style = .clear
+    glass.style = .regular
     glass.cornerRadius = 999
     glass.tintColor = nil
     glass.contentView = NSView()
