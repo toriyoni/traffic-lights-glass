@@ -6,7 +6,7 @@ import AppKit
 final class GlassGroupPanel: NSPanel {
     let buttonViews: [WindowAction: OverlayButtonView]
 
-    private let buttonContentView = NSView(frame: .zero)
+    private let buttonContentView = GlassButtonContentView(frame: .zero)
     private var materialView: NSView?
     private var usesOpaqueMaterial = false
 
@@ -115,6 +115,7 @@ final class GlassGroupPanel: NSPanel {
     private func installMaterial() {
         usesOpaqueMaterial = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         buttonContentView.removeFromSuperview()
+        buttonContentView.drawsGlassEdge = false
         buttonContentView.translatesAutoresizingMaskIntoConstraints = true
         buttonContentView.autoresizingMask = [.width, .height]
 
@@ -159,6 +160,7 @@ final class GlassGroupPanel: NSPanel {
             // Apple's glass compositor expects content here, not in a sibling.
             buttonContentView.translatesAutoresizingMaskIntoConstraints = false
             buttonContentView.autoresizingMask = []
+            buttonContentView.drawsGlassEdge = true
             glass.contentView = buttonContentView
             return glass
         }
@@ -176,6 +178,52 @@ final class GlassGroupPanel: NSPanel {
         rect.minX.isFinite && rect.minY.isFinite
             && rect.width.isFinite && rect.height.isFinite
             && rect.width > 0 && rect.height > 0
+    }
+}
+
+/// Draw a neutral rim over the system glass and behind the controls. The
+/// separate panel can pick up the saturated colors of the window's native lights.
+private final class GlassButtonContentView: NSView {
+    var drawsGlassEdge = false {
+        didSet { needsDisplay = true }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsDisplay = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard drawsGlassEdge, bounds.width > 3, bounds.height > 3 else { return }
+
+        let outer = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let radius = min(outer.width, outer.height) / 2
+        let silhouette = NSBezierPath(roundedRect: outer, xRadius: radius, yRadius: radius)
+        NSColor.windowBackgroundColor.withAlphaComponent(0.24).setFill()
+        silhouette.fill()
+
+        let inner = outer.insetBy(dx: 1, dy: 1)
+        let innerRadius = radius - 1
+        silhouette.append(NSBezierPath(roundedRect: inner, xRadius: innerRadius, yRadius: innerRadius))
+        silhouette.windingRule = .evenOdd
+        let rim = NSGradient(
+            starting: NSColor.white.withAlphaComponent(0.48),
+            ending: NSColor.white.withAlphaComponent(0.14)
+        )
+        NSGraphicsContext.saveGraphicsState()
+        silhouette.addClip()
+        rim?.draw(
+            from: NSPoint(x: outer.midX, y: outer.maxY),
+            to: NSPoint(x: outer.midX, y: outer.minY),
+            options: []
+        )
+        NSGraphicsContext.restoreGraphicsState()
     }
 }
 
