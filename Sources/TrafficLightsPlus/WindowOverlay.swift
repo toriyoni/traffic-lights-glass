@@ -331,7 +331,15 @@ final class WindowOverlay {
             nativeCGFrame(for: action).map { (action, $0) }
         })
         let native = GlassGroupLayout.capsuleFrame(buttonFrames: nativeFrames) ?? capsule
-        let envelope = capsule.union(native)
+        let overshootFrames = GlassGroupLayout.presentationFrames(
+            nativeFrames: nativeFrames, expandedFrames: preparedCGFrames,
+            progress: GlassGroupRevealState.maximumProgress, windowFrame: windowFrame
+        )
+        let overshoot = GlassGroupLayout.capsuleFrame(
+            buttonFrames: overshootFrames,
+            padding: GlassGroupLayout.padding * GlassGroupRevealState.maximumProgress
+        ) ?? capsule
+        let envelope = capsule.union(native).union(overshoot)
         return Dictionary(uniqueKeysWithValues: preparedActions.map { ($0, envelope) })
     }
 
@@ -399,8 +407,9 @@ final class WindowOverlay {
         // An idle interval is not animation time: start a newly triggered reveal
         // from its current size instead of jumping halfway through the animation.
         let startingAnimation = presentationTimer == nil && desiredActions != lastDesiredActions
+        let timeSinceUpdate = max(now - lastPresentationUpdate, 0)
         let elapsed = !startingAnimation && lastPresentationUpdate > 0
-            ? min(max(now - lastPresentationUpdate, 0), 0.05) : 0
+            ? (controlStyle == .liquidGlass ? timeSinceUpdate : min(timeSinceUpdate, 0.05)) : 0
         lastPresentationUpdate = now
 
         if controlStyle == .liquidGlass {
@@ -432,11 +441,14 @@ final class WindowOverlay {
 
         updatePresentationState(desiredActions: desiredActions)
         renderPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation)
-        if (controlStyle == .liquidGlass && glassReveal.isWaitingToCollapse) || Self.needsPresentationAnimation(
-            progress: presentationProgressByAction,
-            availableActions: availableActions,
-            desiredActions: desiredActions
-        ) {
+        let needsAnimation = controlStyle == .liquidGlass
+            ? glassReveal.isAnimating || glassReveal.isWaitingToCollapse
+            : Self.needsPresentationAnimation(
+                progress: presentationProgressByAction,
+                availableActions: availableActions,
+                desiredActions: desiredActions
+            )
+        if needsAnimation {
             startPresentationTimer()
         } else {
             stopPresentationTimer()
@@ -540,22 +552,26 @@ final class WindowOverlay {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil
         for panel in panels.values where panel.isVisible { panel.orderOut(nil) }
-        let linear = glassReveal.progress
-        let eased = linear * linear * (3 - 2 * linear)
+        let progress = glassReveal.progress
+        let nativeCGFrames = Dictionary(uniqueKeysWithValues: availableActions.compactMap { action -> (WindowAction, CGRect)? in
+            nativeCGFrame(for: action).map { (action, $0) }
+        })
+        let presentationFrames = GlassGroupLayout.presentationFrames(
+            nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames,
+            progress: progress, windowFrame: windowFrame
+        )
         var frames: [WindowAction: CGRect] = [:]
         var nativeFrames: [NSRect] = []
         for action in availableActions {
-            guard let native = nativeCGFrame(for: action),
-                  let expanded = preparedCGFrames[action],
-                  let frame = appKitFrame(for: ControlLayout.interpolatedFrame(
-                      from: native, to: expanded, progress: eased
-                  )) else { continue }
+            guard let native = nativeCGFrames[action],
+                  let presented = presentationFrames[action],
+                  let frame = appKitFrame(for: presented) else { continue }
             frames[action] = frame
             if let nativeFrame = appKitFrame(for: native) { nativeFrames.append(nativeFrame) }
         }
-        guard eased > 0,
+        guard progress > 0,
               let capsule = GlassGroupLayout.capsuleFrame(
-                  buttonFrames: frames, padding: GlassGroupLayout.padding * eased
+                  buttonFrames: frames, padding: GlassGroupLayout.padding * progress
               ) else {
             glassPanel.ignoresMouseEvents = true
             glassPanel.orderOut(nil)
@@ -579,7 +595,7 @@ final class WindowOverlay {
             buttonFrames: frames,
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
-            progress: eased
+            progress: progress
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
@@ -613,9 +629,15 @@ final class WindowOverlay {
                 actions: availableActions,
                 padding: GlassGroupLayout.activationPadding
             )
-            let capsule = GlassGroupLayout.capsuleFrame(
+            var capsule = GlassGroupLayout.capsuleFrame(
                 buttonFrames: appKitControlFrames(actions: availableActions)
-            )?.insetBy(dx: -GlassGroupLayout.retentionPadding, dy: -GlassGroupLayout.retentionPadding)
+            )
+            // The pointer can rest on the briefly larger, bouncing capsule.
+            // Keep it engaged using the live frame as well as the resting one.
+            if glassPanel.isVisible {
+                capsule = capsule.map { $0.union(glassPanel.frame) } ?? glassPanel.frame
+            }
+            capsule = capsule?.insetBy(dx: -GlassGroupLayout.retentionPadding, dy: -GlassGroupLayout.retentionPadding)
             return glassReveal.desiredVisibility(
                 pointer: mouseLocation, nativeRegion: nativeRegion,
                 expandedRegion: capsule, now: now
@@ -710,7 +732,9 @@ final class WindowOverlay {
             presentationState = .hidden
             return
         }
-        if desiredActions.contains(where: { (presentationProgressByAction[$0] ?? 0) < 1 }) {
+        if controlStyle == .liquidGlass, glassReveal.isAnimating {
+            presentationState = desiredActions.isEmpty ? .collapsing : .expanding
+        } else if desiredActions.contains(where: { (presentationProgressByAction[$0] ?? 0) < 1 }) {
             presentationState = .expanding
         } else if visibleProgress.contains(where: { !desiredActions.contains($0.key) }) {
             presentationState = .collapsing
@@ -782,7 +806,7 @@ final class WindowOverlay {
         if isNativeZoomClickInFlight { finishNativeZoomClick(restorePresentation: false) }
         stopPresentationTimer()
         guard presentationState != hiddenState || panels.values.contains(where: \.isVisible)
-                || glassPanel.isVisible || glassReveal.isEngaged else {
+                || glassPanel.isVisible || glassReveal.isEngaged || glassReveal.isAnimating else {
             return false
         }
         resetPresentationProgress()
