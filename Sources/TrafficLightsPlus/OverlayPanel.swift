@@ -12,17 +12,17 @@ final class OverlayButtonView: NSView {
         didSet {
             guard behavior != oldValue else { return }
             updateLocalizedMetadata()
-            needsDisplay = true
+            refreshAppearance()
         }
     }
     var language: AppLanguage = .simplifiedChinese {
         didSet { if language != oldValue { updateLocalizedMetadata() } }
     }
-    var style: ControlStyle = .macOS { didSet { if style != oldValue { needsDisplay = true } } }
+    var style: ControlStyle = .macOS { didSet { if style != oldValue { refreshAppearance() } } }
     var controlSize: CGFloat = 28 { didSet { if controlSize != oldValue { needsDisplay = true } } }
-    var isControlEnabled = true { didSet { if isControlEnabled != oldValue { needsDisplay = true } } }
-    var isWindowActive = false { didSet { if isWindowActive != oldValue { needsDisplay = true } } }
-    var isGroupHovered = false { didSet { if isGroupHovered != oldValue { needsDisplay = true } } }
+    var isControlEnabled = true { didSet { if isControlEnabled != oldValue { refreshAppearance() } } }
+    var isWindowActive = false { didSet { if isWindowActive != oldValue { refreshAppearance() } } }
+    var isGroupHovered = false { didSet { if isGroupHovered != oldValue { refreshAppearance() } } }
     var actionHandler: ((WindowAction) -> Void)?
     var hoverHandler: ((Bool) -> Void)?
     var pressHandler: ((WindowAction) -> Void)?
@@ -34,7 +34,7 @@ final class OverlayButtonView: NSView {
         guard inside != isHovered else { return }
         isHovered = inside
         if !inside { isPressed = false }
-        needsDisplay = true
+        refreshAppearance()
     }
 
     func resetInteractionState() {
@@ -42,12 +42,13 @@ final class OverlayButtonView: NSView {
         isHovered = false
         isPressed = false
         isGroupHovered = false
-        needsDisplay = true
+        refreshAppearance()
     }
 
     private var isHovered = false
     private var isPressed = false
     private var trackingAreaRef: NSTrackingArea?
+    private var glassSurface: NSView?
 
     init(action: WindowAction) {
         self.action = action
@@ -55,12 +56,37 @@ final class OverlayButtonView: NSView {
         super.init(frame: .zero)
         setAccessibilityRole(.button)
         updateLocalizedMetadata()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(accessibilityAppearanceDidChange(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { nil }
 
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
     override var isFlipped: Bool { true }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        layoutGlassSurface()
+    }
+
+    override func layout() {
+        super.layout()
+        layoutGlassSurface()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshAppearance()
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         style == .liquidGlass || super.acceptsFirstMouse(for: event)
@@ -93,13 +119,13 @@ final class OverlayButtonView: NSView {
         pressHandler?(action)
         guard isControlEnabled else { NSSound.beep(); return }
         isPressed = true
-        needsDisplay = true
+        refreshAppearance()
     }
 
     override func mouseUp(with event: NSEvent) {
         defer {
             isPressed = false
-            needsDisplay = true
+            refreshAppearance()
         }
         guard isPressed, isControlEnabled,
               bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
@@ -112,7 +138,7 @@ final class OverlayButtonView: NSView {
         super.draw(dirtyRect)
         let rect = bounds
         if style == .liquidGlass {
-            drawGlassControl(in: rect)
+            if glassSurface == nil { drawGlassFallback(in: rect) }
             return
         }
         let actionColor = color(for: action)
@@ -148,9 +174,76 @@ final class OverlayButtonView: NSView {
         }
     }
 
-    /// The material belongs to GlassGroupPanel. These are restrained, circular
-    /// controls inside that one surface, not three competing glass effects.
-    private func drawGlassControl(in rect: NSRect) {
+    @objc private func accessibilityAppearanceDidChange(_ notification: Notification) {
+        if Thread.isMainThread {
+            refreshAppearance()
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.refreshAppearance() }
+        }
+    }
+
+    private func refreshAppearance() {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            if style == .liquidGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+                let glass: GlassControlMaterialView
+                if let existing = glassSurface as? GlassControlMaterialView {
+                    glass = existing
+                } else {
+                    glass = GlassControlMaterialView(frame: .zero)
+                    glass.style = .clear
+                    glass.setAccessibilityElement(false)
+                    glass.setAccessibilityChildren([])
+                    let symbol = GlassControlSymbolView(frame: .zero)
+                    symbol.setAccessibilityElement(false)
+                    symbol.drawSymbol = { [weak self] bounds in
+                        guard let self, self.shouldDrawGlassSymbol else { return }
+                        // The material is inset by 1 pt. Keep the glyph's size
+                        // and center identical to the existing click target.
+                        self.drawSymbol(in: bounds.insetBy(dx: -1, dy: -1))
+                    }
+                    glass.contentView = symbol
+                    addSubview(glass)
+                    glassSurface = glass
+                }
+                let colored = isControlEnabled && isColorVisible
+                let base = colored ? color(for: action) : inactiveControlColor()
+                let tint = isPressed ? (base.blended(withFraction: 0.10, of: .black) ?? base) : base
+                let opacity: CGFloat = isPressed ? 0.90 : (isHovered ? 0.82 : 0.74)
+                let color = tint.withAlphaComponent(colored ? opacity : 0.48)
+                if glass.tintColor != color { glass.tintColor = color }
+                glass.alphaValue = isControlEnabled ? 1 : 0.55
+                glass.contentView?.needsDisplay = true
+                layoutGlassSurface()
+            } else {
+                glassSurface?.removeFromSuperview()
+                glassSurface = nil
+            }
+        }
+        #endif
+        needsDisplay = true
+    }
+
+    private func layoutGlassSurface() {
+        guard let glassSurface else { return }
+        let rect = bounds.width > 2 && bounds.height > 2 ? bounds.insetBy(dx: 1, dy: 1) : .zero
+        if glassSurface.frame != rect { glassSurface.frame = rect }
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = glassSurface as? NSGlassEffectView {
+            let radius = min(rect.width, rect.height) / 2
+            if glass.cornerRadius != radius { glass.cornerRadius = radius }
+        }
+        #endif
+        glassSurface.layoutSubtreeIfNeeded()
+    }
+
+    private var shouldDrawGlassSymbol: Bool {
+        isColorVisible || isPointerHighlightVisible || NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+    }
+
+    /// Older systems and Reduce Transparency retain a legible solid control.
+    /// On macOS 26+, the colored body and its highlights are system glass.
+    private func drawGlassFallback(in rect: NSRect) {
         guard rect.width > 2, rect.height > 2 else { return }
         let circleRect = rect.insetBy(dx: 1, dy: 1)
         let circle = NSBezierPath(ovalIn: circleRect)
@@ -171,7 +264,7 @@ final class OverlayButtonView: NSView {
         circle.lineWidth = highContrast ? 1.25 : 0.65
         circle.stroke()
 
-        if isColorVisible || isPointerHighlightVisible || highContrast {
+        if shouldDrawGlassSymbol {
             drawSymbol(in: rect)
         }
     }
@@ -285,6 +378,31 @@ final class OverlayButtonView: NSView {
         return symbolRect
     }
 }
+
+#if compiler(>=6.2)
+@available(macOS 26.0, *)
+private final class GlassControlMaterialView: NSGlassEffectView {
+    // OverlayButtonView remains the sole input and accessibility target.
+    // The nested optical surface must not consume mouse-down/up or hover.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private final class GlassControlSymbolView: NSView {
+    var drawSymbol: ((NSRect) -> Void)?
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        drawSymbol?(bounds)
+    }
+}
+#endif
 
 final class OverlayPanel: NSPanel {
     let overlayView: OverlayButtonView

@@ -404,8 +404,10 @@ import Testing
 }
 
 @MainActor
-@Test func overlayRequiresOneMatchingPressPerAction() throws {
+@Test(arguments: [ControlStyle.macOS, .liquidGlass])
+func overlayRequiresOneMatchingPressPerAction(style: ControlStyle) throws {
     let panel = OverlayPanel(action: .minimize)
+    panel.overlayView.style = style
     panel.setFrame(NSRect(x: 0, y: 0, width: 28, height: 28), display: false)
     var actionCount = 0
     panel.overlayView.actionHandler = { _ in actionCount += 1 }
@@ -426,4 +428,33 @@ import Testing
     panel.overlayView.resetInteractionState()
     panel.overlayView.mouseUp(with: up)
     #expect(actionCount == 1)
+}
+
+@MainActor
+@Test func glassDecorationKeepsTheOriginalMouseTargetWhileResizing() throws {
+    #if compiler(>=6.2)
+    guard #available(macOS 26.0, *),
+          !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency else { return }
+    let panel = OverlayPanel(action: .close)
+    let button = panel.overlayView
+    button.style = .liquidGlass
+    button.isWindowActive = true
+    let material = try #require(button.subviews.first as? NSGlassEffectView)
+    for size: CGFloat in [14, 28, 48, 18] {
+        panel.setFrame(NSRect(x: 0, y: 0, width: size, height: size), display: false)
+        button.layoutSubtreeIfNeeded()
+        let center = NSPoint(x: size / 2, y: size / 2)
+        #expect(button.hitTest(center) === button)
+        #expect(button.bounds.contains(material.frame))
+        // Hover and resize must reuse the live material, not recreate a glass
+        // compositor on every animation frame or replace the input view.
+        button.setPointerInside(true)
+        #expect(button.subviews.first === material)
+        #expect(button.hitTest(center) === button)
+        button.resetInteractionState()
+    }
+    button.style = .macOS
+    #expect(material.superview == nil)
+    #expect(button.hitTest(NSPoint(x: 9, y: 9)) === button)
+    #endif
 }
