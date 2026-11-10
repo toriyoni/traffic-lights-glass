@@ -1,4 +1,4 @@
-import CoreGraphics
+import AppKit
 import Testing
 @testable import TrafficLightsPlus
 
@@ -248,7 +248,7 @@ private let glassNativeFrames: [WindowAction: CGRect] = [
     #expect(!state.isAnimating)
 }
 
-@Test(arguments: [CGFloat(18), 28, 48])
+@Test(arguments: [CGFloat(18), 24, 28, 48])
 func glassSpringGeometryKeepsOvershootAndDistinctButtonsInsideWindow(size: CGFloat) throws {
     let window = CGRect(x: -800, y: -200, width: 800, height: 600)
     for atRightEdge in [false, true] {
@@ -257,12 +257,11 @@ func glassSpringGeometryKeepsOvershootAndDistinctButtonsInsideWindow(size: CGFlo
         }
         let expanded = GlassGroupLayout.expandedFrames(nativeFrames: native, controlSize: size, windowFrame: window)
         for progress: CGFloat in [0, 0.3, 0.8, 1, 1.16, GlassGroupRevealState.maximumProgress] {
-            let presented = GlassGroupLayout.presentationFrames(
+            let presentation = try #require(GlassGroupLayout.presentation(
                 nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
-            )
-            let capsule = try #require(GlassGroupLayout.capsuleFrame(
-                buttonFrames: presented, padding: GlassGroupLayout.padding * progress
             ))
+            let presented = presentation.buttonFrames
+            let capsule = presentation.capsuleFrame
             #expect(window.contains(capsule))
             let close = try #require(presented[.close])
             let minimize = try #require(presented[.minimize])
@@ -273,6 +272,73 @@ func glassSpringGeometryKeepsOvershootAndDistinctButtonsInsideWindow(size: CGFlo
             if progress == 0 { #expect(presented == native) }
             if progress == 1 { #expect(presented == expanded) }
             if progress > 1 { #expect(close.width > size) }
+        }
+    }
+}
+
+@Test(arguments: [CGFloat(18), 24, 28, 48])
+func glassBounceKeepsItsRestingCenterOnBothWindowEdges(size: CGFloat) throws {
+    let window = CGRect(x: -800.25, y: -200.75, width: 800, height: 600)
+    for atRightEdge in [false, true] {
+        let native = glassNativeFrames.mapValues {
+            $0.offsetBy(dx: window.minX + (atRightEdge ? 720 : 0), dy: window.minY)
+        }
+        let expanded = GlassGroupLayout.expandedFrames(nativeFrames: native, controlSize: size, windowFrame: window)
+        let resting = try #require(GlassGroupLayout.capsuleFrame(buttonFrames: expanded))
+        let host = try #require(GlassGroupLayout.presentationEnvelope(
+            nativeFrames: native, expandedFrames: expanded, windowFrame: window
+        ))
+        for progress: CGFloat in [0.9, 1, 1.16, 1.08, 1.02, 0.98, 0.99, 1.002, 1.001, 1, GlassGroupRevealState.maximumProgress] {
+            let presentation = try #require(GlassGroupLayout.presentation(
+                nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
+            ))
+            let capsule = presentation.capsuleFrame
+            #expect(abs(capsule.midX - resting.midX) < 0.000001)
+            #expect(abs(capsule.midY - resting.midY) < 0.000001)
+            #expect(window.contains(capsule))
+            #expect(host.insetBy(dx: -0.000001, dy: -0.000001).contains(capsule))
+            if progress > 1 { #expect(capsule.width > resting.width) }
+        }
+    }
+}
+
+@MainActor
+@Test(arguments: [CGFloat(24), 48])
+func glassPanelDoesNotRoundItsCenterWhenTheSpringSettles(size: CGFloat) throws {
+    let window = CGRect(x: 600.25, y: 400.5, width: 800, height: 600)
+    let native = glassNativeFrames.mapValues { $0.offsetBy(dx: window.minX, dy: window.minY) }
+    let expanded = GlassGroupLayout.expandedFrames(nativeFrames: native, controlSize: size, windowFrame: window)
+    let resting = try #require(GlassGroupLayout.capsuleFrame(buttonFrames: expanded))
+    let host = try #require(GlassGroupLayout.presentationEnvelope(
+        nativeFrames: native, expandedFrames: expanded, windowFrame: window
+    ))
+    let panel = GlassGroupPanel()
+    panel.ignoresMouseEvents = true
+    defer { panel.orderOut(nil) }
+    var windowFrame: CGRect?
+    for progress: CGFloat in [0.01, 0.1, 0.25, 0.5, 0.8, 0.9, 1.16, 1.08, 1.02, 0.98, 0.99, 1.002, 1.001, 1] {
+        let presentation = try #require(GlassGroupLayout.presentation(
+            nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
+        ))
+        panel.present(buttonFrames: presentation.buttonFrames, nativeButtonFrames: Array(native.values),
+                      capsuleFrame: presentation.capsuleFrame, progress: progress, containerFrame: host)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.002))
+        if let windowFrame { #expect(panel.frame == windowFrame) }
+        windowFrame = panel.frame
+        let material = try #require(panel.contentView?.subviews.last)
+        let visible = panel.convertToScreen(material.convert(material.bounds, to: nil))
+        if progress >= 0.9 {
+            #expect(abs(visible.midX - resting.midX) < 0.000001)
+            #expect(abs(visible.midY - resting.midY) < 0.000001)
+        }
+        for (action, view) in panel.buttonViews {
+            let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: panel.contentView)
+            #expect(panel.contentView?.hitTest(center) === view)
+            let actual = panel.convertToScreen(view.convert(view.bounds, to: nil))
+            let intended = try #require(presentation.buttonFrames[action])
+            #expect(abs(actual.midX - intended.midX) < 0.000001)
+            #expect(abs(actual.midY - intended.midY) < 0.000001)
         }
     }
 }

@@ -5,6 +5,7 @@ import AppKit
 /// can never start independent reveal animations.
 final class GlassGroupPanel: NSPanel {
     let buttonViews: [WindowAction: OverlayButtonView]
+    private(set) var presentedCapsuleFrame: NSRect?
 
     private let buttonContentView = NSView(frame: .zero)
     private var materialView: NSView?
@@ -71,24 +72,32 @@ final class GlassGroupPanel: NSPanel {
         buttonFrames: [WindowAction: NSRect],
         nativeButtonFrames: [NSRect],
         capsuleFrame: NSRect,
-        progress: CGFloat
+        progress: CGFloat,
+        containerFrame: NSRect? = nil
     ) {
         guard progress.isFinite, progress > 0,
               Self.isValid(capsuleFrame), !buttonFrames.isEmpty else {
+            presentedCapsuleFrame = nil
             orderOut(nil)
             return
         }
 
         let visibleProgress = min(1, max(0, progress))
-        if frame != capsuleFrame { setFrame(capsuleFrame, display: false) }
-        let localBounds = NSRect(origin: .zero, size: capsuleFrame.size)
-        materialView?.frame = localBounds
+        // AppKit rounds top-level window frames. Resizing that window on every
+        // spring frame shifts the visible center by up to a point, even when
+        // the requested center is constant. Animate views in a stationary host.
+        let hostFrame = containerFrame.flatMap { Self.isValid($0) ? $0 : nil } ?? capsuleFrame
+        let integralHost = hostFrame.union(capsuleFrame).integral
+        if frame != integralHost { setFrame(integralHost, display: false) }
+        presentedCapsuleFrame = capsuleFrame
+        let localFrame = capsuleFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
+        materialView?.frame = localFrame
         if let nativeLightMask {
             let localFrames = nativeButtonFrames.filter(Self.isValid).map {
                 $0.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
             }
-            if nativeLightMask.frame != localBounds || nativeLightMask.buttonFrames != localFrames {
-                nativeLightMask.frame = localBounds
+            if nativeLightMask.frame != localFrame || nativeLightMask.buttonFrames != localFrames {
+                nativeLightMask.frame = localFrame
                 nativeLightMask.buttonFrames = localFrames
                 nativeLightMask.needsDisplay = true
             }
@@ -149,18 +158,17 @@ final class GlassGroupPanel: NSPanel {
         } else {
             surface = makeGlassMaterial()
         }
-        surface.frame = NSRect(origin: .zero, size: frame.size)
-        surface.autoresizingMask = [.width, .height]
+        surface.frame = presentedCapsuleFrame?.offsetBy(dx: -frame.minX, dy: -frame.minY)
+            ?? NSRect(origin: .zero, size: frame.size)
+        surface.autoresizingMask = []
         materialView = surface
+        let container = NSView(frame: NSRect(origin: .zero, size: frame.size))
         if let nativeLightMask {
-            let container = NSView(frame: surface.frame)
-            nativeLightMask.frame = container.bounds
+            nativeLightMask.frame = surface.frame
             container.addSubview(nativeLightMask)
-            container.addSubview(surface)
-            contentView = container
-        } else {
-            contentView = surface
         }
+        container.addSubview(surface)
+        contentView = container
         layoutMaterialContent()
         (surface as? RoundedMaterialView)?.updateCornerRadius()
     }

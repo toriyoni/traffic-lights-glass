@@ -61,18 +61,56 @@ struct GlassGroupLayout {
         return union.insetBy(dx: -safePadding, dy: -safePadding)
     }
 
-    /// The spring can travel past the resting size. Keep that overshoot in the
-    /// geometry instead of using the classic controls' clamped interpolation.
-    static func presentationFrames(
+    struct Presentation {
+        let buttonFrames: [WindowAction: CGRect]
+        let capsuleFrame: CGRect
+    }
+
+    /// Size may overshoot, but the center finishes its approach before the
+    /// bounce. Returning below 1 during settling must not move the center again.
+    static func presentation(
         nativeFrames: [WindowAction: CGRect],
         expandedFrames: [WindowAction: CGRect],
         progress: CGFloat,
         windowFrame: CGRect
-    ) -> [WindowAction: CGRect] {
-        guard isUsable(windowFrame), progress.isFinite else { return [:] }
-        let amount = min(GlassGroupRevealState.maximumProgress, max(0, progress))
+    ) -> Presentation? {
+        guard isUsable(windowFrame), progress.isFinite else { return nil }
+        let expanded = expandedFrames.filter { action, frame in
+            isUsable(frame) && nativeFrames[action].map(isUsable) == true
+        }
+        let native = nativeFrames.filter { expanded[$0.key] != nil }
+        guard let start = capsuleFrame(buttonFrames: native, padding: 0),
+              let end = capsuleFrame(buttonFrames: expanded) else { return nil }
+        var amount = min(GlassGroupRevealState.maximumProgress, max(0, progress))
+
+        // Near a window edge, ease the overshoot toward the space available
+        // around the resting center. Pushing the capsule sideways each frame
+        // would reintroduce the very wobble that anchoring is meant to prevent.
+        if amount > 1 {
+            let horizontalRoom = 2 * min(end.midX - windowFrame.minX, windowFrame.maxX - end.midX)
+            let verticalRoom = 2 * min(end.midY - windowFrame.minY, windowFrame.maxY - end.midY)
+            let widthGrowth = end.width - start.width
+            let heightGrowth = end.height - start.height
+            var limit = CGFloat.infinity
+            if widthGrowth > 0 { limit = min(limit, max(0, horizontalRoom - end.width) / widthGrowth) }
+            if heightGrowth > 0 { limit = min(limit, max(0, verticalRoom - end.height) / heightGrowth) }
+            if limit == 0 {
+                amount = 1
+            } else if limit.isFinite, amount - 1 > limit * 0.75 {
+                let shoulder = limit * 0.75
+                let remaining = limit - shoulder
+                amount = 1 + shoulder + remaining * tanh((amount - 1 - shoulder) / remaining)
+            }
+        }
+
+        let approach = min(amount / 0.9, 1)
+        let placement = approach * approach * (3 - 2 * approach)
+        let center = CGPoint(
+            x: start.midX + (end.midX - start.midX) * placement,
+            y: start.midY + (end.midY - start.midY) * placement
+        )
         var result: [WindowAction: CGRect] = [:]
-        for (action, expanded) in expandedFrames {
+        for (action, expanded) in expanded {
             guard let native = nativeFrames[action], isUsable(native), isUsable(expanded) else { continue }
             result[action] = CGRect(
                 x: native.minX + (expanded.minX - native.minX) * amount,
@@ -81,18 +119,37 @@ struct GlassGroupLayout {
                 height: native.height + (expanded.height - native.height) * amount
             )
         }
-        guard let capsule = capsuleFrame(buttonFrames: result, padding: padding * amount) else { return [:] }
+        guard let interpolated = capsuleFrame(buttonFrames: result, padding: padding * amount) else { return nil }
+        var offset = CGPoint(x: center.x - interpolated.midX, y: center.y - interpolated.midY)
+        let centered = interpolated.offsetBy(dx: offset.x, dy: offset.y)
 
-        // Move the entire group together if its bounce reaches a window edge.
-        // Never squash individual buttons or change the gaps to make it fit.
-        var offset = CGPoint.zero
-        if capsule.width <= windowFrame.width {
-            offset.x = min(max(capsule.minX, windowFrame.minX), windowFrame.maxX - capsule.width) - capsule.minX
+        // Keep the initial approach inside the window as well. Once the center
+        // is at rest, the limited overshoot above already fits without shifting.
+        if centered.width <= windowFrame.width {
+            offset.x += min(max(centered.minX, windowFrame.minX), windowFrame.maxX - centered.width) - centered.minX
         }
-        if capsule.height <= windowFrame.height {
-            offset.y = min(max(capsule.minY, windowFrame.minY), windowFrame.maxY - capsule.height) - capsule.minY
+        if centered.height <= windowFrame.height {
+            offset.y += min(max(centered.minY, windowFrame.minY), windowFrame.maxY - centered.height) - centered.minY
         }
-        return result.mapValues { $0.offsetBy(dx: offset.x, dy: offset.y) }
+        return Presentation(
+            buttonFrames: result.mapValues { $0.offsetBy(dx: offset.x, dy: offset.y) },
+            capsuleFrame: interpolated.offsetBy(dx: offset.x, dy: offset.y)
+        )
+    }
+
+    /// A stationary host for the entire animation, also used for occlusion.
+    static func presentationEnvelope(
+        nativeFrames: [WindowAction: CGRect],
+        expandedFrames: [WindowAction: CGRect],
+        windowFrame: CGRect
+    ) -> CGRect? {
+        guard let resting = capsuleFrame(buttonFrames: expandedFrames) else { return nil }
+        let native = capsuleFrame(buttonFrames: nativeFrames) ?? resting
+        let peak = presentation(
+            nativeFrames: nativeFrames, expandedFrames: expandedFrames,
+            progress: GlassGroupRevealState.maximumProgress, windowFrame: windowFrame
+        )?.capsuleFrame ?? resting
+        return resting.union(native).union(peak)
     }
 
     private static func isUsable(_ frame: CGRect) -> Bool {

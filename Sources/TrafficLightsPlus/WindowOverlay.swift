@@ -330,16 +330,10 @@ final class WindowOverlay {
         let nativeFrames = Dictionary(uniqueKeysWithValues: preparedActions.compactMap { action -> (WindowAction, CGRect)? in
             nativeCGFrame(for: action).map { (action, $0) }
         })
-        let native = GlassGroupLayout.capsuleFrame(buttonFrames: nativeFrames) ?? capsule
-        let overshootFrames = GlassGroupLayout.presentationFrames(
+        let envelope = GlassGroupLayout.presentationEnvelope(
             nativeFrames: nativeFrames, expandedFrames: preparedCGFrames,
-            progress: GlassGroupRevealState.maximumProgress, windowFrame: windowFrame
-        )
-        let overshoot = GlassGroupLayout.capsuleFrame(
-            buttonFrames: overshootFrames,
-            padding: GlassGroupLayout.padding * GlassGroupRevealState.maximumProgress
+            windowFrame: windowFrame
         ) ?? capsule
-        let envelope = capsule.union(native).union(overshoot)
         return Dictionary(uniqueKeysWithValues: preparedActions.map { ($0, envelope) })
     }
 
@@ -556,23 +550,26 @@ final class WindowOverlay {
         let nativeCGFrames = Dictionary(uniqueKeysWithValues: availableActions.compactMap { action -> (WindowAction, CGRect)? in
             nativeCGFrame(for: action).map { (action, $0) }
         })
-        let presentationFrames = GlassGroupLayout.presentationFrames(
+        let presentation = GlassGroupLayout.presentation(
             nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames,
             progress: progress, windowFrame: windowFrame
+        )
+        let envelope = GlassGroupLayout.presentationEnvelope(
+            nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames, windowFrame: windowFrame
         )
         var frames: [WindowAction: CGRect] = [:]
         var nativeFrames: [NSRect] = []
         for action in availableActions {
             guard let native = nativeCGFrames[action],
-                  let presented = presentationFrames[action],
+                  let presented = presentation?.buttonFrames[action],
                   let frame = appKitFrame(for: presented) else { continue }
             frames[action] = frame
             if let nativeFrame = appKitFrame(for: native) { nativeFrames.append(nativeFrame) }
         }
         guard progress > 0,
-              let capsule = GlassGroupLayout.capsuleFrame(
-                  buttonFrames: frames, padding: GlassGroupLayout.padding * progress
-              ) else {
+              let presentation, let envelope,
+              let capsule = appKitFrame(for: presentation.capsuleFrame),
+              let container = appKitFrame(for: envelope) else {
             glassPanel.ignoresMouseEvents = true
             glassPanel.orderOut(nil)
             glassPanel.buttonViews.values.forEach { $0.resetInteractionState() }
@@ -595,7 +592,8 @@ final class WindowOverlay {
             buttonFrames: frames,
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
-            progress: progress
+            progress: progress,
+            containerFrame: container
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
@@ -634,8 +632,8 @@ final class WindowOverlay {
             )
             // The pointer can rest on the briefly larger, bouncing capsule.
             // Keep it engaged using the live frame as well as the resting one.
-            if glassPanel.isVisible {
-                capsule = capsule.map { $0.union(glassPanel.frame) } ?? glassPanel.frame
+            if glassPanel.isVisible, let liveCapsule = glassPanel.presentedCapsuleFrame {
+                capsule = capsule.map { $0.union(liveCapsule) } ?? liveCapsule
             }
             capsule = capsule?.insetBy(dx: -GlassGroupLayout.retentionPadding, dy: -GlassGroupLayout.retentionPadding)
             return glassReveal.desiredVisibility(
