@@ -8,6 +8,7 @@ final class GlassGroupPanel: NSPanel {
 
     private let buttonContentView = NSView(frame: .zero)
     private var materialView: NSView?
+    private var nativeLightMask: NativeLightMaskView?
     private var usesOpaqueMaterial = false
 
     init(actions: [WindowAction] = WindowAction.allCases) {
@@ -59,6 +60,7 @@ final class GlassGroupPanel: NSPanel {
     /// drawing coordinates are flipped.
     func present(
         buttonFrames: [WindowAction: NSRect],
+        nativeButtonFrames: [NSRect],
         capsuleFrame: NSRect,
         progress: CGFloat
     ) {
@@ -70,7 +72,18 @@ final class GlassGroupPanel: NSPanel {
 
         let visibleProgress = min(1, max(0, progress))
         if frame != capsuleFrame { setFrame(capsuleFrame, display: false) }
-        materialView?.frame = NSRect(origin: .zero, size: capsuleFrame.size)
+        let localBounds = NSRect(origin: .zero, size: capsuleFrame.size)
+        materialView?.frame = localBounds
+        if let nativeLightMask {
+            let localFrames = nativeButtonFrames.filter(Self.isValid).map {
+                $0.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
+            }
+            if nativeLightMask.frame != localBounds || nativeLightMask.buttonFrames != localFrames {
+                nativeLightMask.frame = localBounds
+                nativeLightMask.buttonFrames = localFrames
+                nativeLightMask.needsDisplay = true
+            }
+        }
         layoutMaterialContent()
 
         var hasVisibleButton = false
@@ -114,6 +127,7 @@ final class GlassGroupPanel: NSPanel {
 
     private func installMaterial() {
         usesOpaqueMaterial = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        nativeLightMask = nil
         buttonContentView.removeFromSuperview()
         buttonContentView.translatesAutoresizingMaskIntoConstraints = true
         buttonContentView.autoresizingMask = [.width, .height]
@@ -129,7 +143,15 @@ final class GlassGroupPanel: NSPanel {
         surface.frame = NSRect(origin: .zero, size: frame.size)
         surface.autoresizingMask = [.width, .height]
         materialView = surface
-        contentView = surface
+        if let nativeLightMask {
+            let container = NSView(frame: surface.frame)
+            nativeLightMask.frame = container.bounds
+            container.addSubview(nativeLightMask)
+            container.addSubview(surface)
+            contentView = container
+        } else {
+            contentView = surface
+        }
         layoutMaterialContent()
         (surface as? RoundedMaterialView)?.updateCornerRadius()
     }
@@ -160,6 +182,7 @@ final class GlassGroupPanel: NSPanel {
             buttonContentView.translatesAutoresizingMaskIntoConstraints = false
             buttonContentView.autoresizingMask = []
             glass.contentView = buttonContentView
+            nativeLightMask = NativeLightMaskView(frame: .zero)
             return glass
         }
         #endif
@@ -176,6 +199,31 @@ final class GlassGroupPanel: NSPanel {
         rect.minX.isFinite && rect.minY.isFinite
             && rect.width.isFinite && rect.height.isFinite
             && rect.width > 0 && rect.height > 0
+    }
+}
+
+/// Cover only the original lights so the system glass samples a neutral
+/// backdrop there. The glass still samples the surrounding title bar.
+private final class NativeLightMaskView: NSView {
+    var buttonFrames: [NSRect] = []
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard !buttonFrames.isEmpty else { return }
+        let radius = min(bounds.width, bounds.height) / 2
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).addClip()
+        NSColor.windowBackgroundColor.setFill()
+        for frame in buttonFrames {
+            NSBezierPath(ovalIn: frame.insetBy(dx: -1, dy: -1)).fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
 

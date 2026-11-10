@@ -543,6 +543,7 @@ final class WindowOverlay {
         let linear = glassReveal.progress
         let eased = linear * linear * (3 - 2 * linear)
         var frames: [WindowAction: CGRect] = [:]
+        var nativeFrames: [NSRect] = []
         for action in availableActions {
             guard let native = nativeCGFrame(for: action),
                   let expanded = preparedCGFrames[action],
@@ -550,6 +551,7 @@ final class WindowOverlay {
                       from: native, to: expanded, progress: eased
                   )) else { continue }
             frames[action] = frame
+            if let nativeFrame = appKitFrame(for: native) { nativeFrames.append(nativeFrame) }
         }
         guard eased > 0,
               let capsule = GlassGroupLayout.capsuleFrame(
@@ -573,7 +575,12 @@ final class WindowOverlay {
         // Keep the whole capsule revealed, while allowing title-bar clicks and
         // drags through its padding, inter-button gaps, and transparent corners.
         glassPanel.ignoresMouseEvents = !canInteract || !pointerInsideControl
-        glassPanel.present(buttonFrames: frames, capsuleFrame: capsule, progress: eased)
+        glassPanel.present(
+            buttonFrames: frames,
+            nativeButtonFrames: nativeFrames,
+            capsuleFrame: capsule,
+            progress: eased
+        )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
         let groupHovered = canInteract && capsule.contains(mouseLocation)
