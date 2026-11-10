@@ -207,10 +207,7 @@ final class OverlayButtonView: NSView {
                     glassSurface = glass
                 }
                 let colored = isControlEnabled && isColorVisible
-                let base = colored ? color(for: action) : inactiveControlColor()
-                let tint = isPressed ? (base.blended(withFraction: 0.10, of: .black) ?? base) : base
-                let opacity: CGFloat = isPressed ? 0.90 : (isHovered ? 0.82 : 0.74)
-                let color = tint.withAlphaComponent(colored ? opacity : 0.48)
+                let color = glassTintColor(colored: colored)
                 if glass.tintColor != color { glass.tintColor = color }
                 glass.alphaValue = isControlEnabled ? 1 : 0.55
                 glass.contentView?.needsDisplay = true
@@ -222,6 +219,39 @@ final class OverlayButtonView: NSView {
         }
         #endif
         needsDisplay = true
+    }
+
+    private func glassTintColor(colored: Bool) -> NSColor {
+        guard colored else { return inactiveControlColor().withAlphaComponent(0.48) }
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        // A glass tint isn't a flat fill: Dark Aqua makes the old saturated
+        // RGBs much deeper than native lights. Calibrate the optical input in
+        // each appearance, keeping the familiar solid palette for other styles.
+        let base = action == .zoom
+            ? NSColor(srgbRed: 0.25, green: 0.78431, blue: 0.15686, alpha: 1)
+            : color(for: action)
+        let whiteMix: CGFloat
+        var opacity: CGFloat
+        switch action {
+        case .close:
+            whiteMix = dark ? 0.98 : 0.02
+            opacity = dark ? 0.82 : 0.78
+        case .minimize:
+            whiteMix = dark ? 0.85 : 0.02
+            opacity = dark ? 0.90 : 0.78
+        case .zoom:
+            whiteMix = dark ? 0.85 : 0.10
+            opacity = 0.78
+        }
+        // Hover keeps the same color. A press only gently dims the material;
+        // increasing saturation and adding black made the old buttons jump.
+        if isPressed { opacity += dark ? -0.04 : 0.04 }
+        return NSColor(
+            srgbRed: base.redComponent + (1 - base.redComponent) * whiteMix,
+            green: base.greenComponent + (1 - base.greenComponent) * whiteMix,
+            blue: base.blueComponent + (1 - base.blueComponent) * whiteMix,
+            alpha: opacity
+        )
     }
 
     private func layoutGlassSurface() {
