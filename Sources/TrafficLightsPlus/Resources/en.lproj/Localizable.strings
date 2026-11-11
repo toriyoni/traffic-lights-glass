@@ -70,3 +70,25 @@
 "menu.enable_overlays" = "Enable Enlarged Traffic Lights";
 "menu.enable_dock_click" = "Enable Dock Click to Minimize";
 "menu.quit" = "Quit Traffic Lights+";
+
+"window_menu.title" = "Window Layout";
+"window_menu.move_resize" = "Move & Resize";
+"window_menu.arrange" = "Fill & Arrange";
+"window_menu.full_screen" = "Full Screen";
+"window_menu.unsupported" = "This action is currently unavailable in this app";
+"window_menu.left" = "Left (hold ⌥ for corner layouts)";
+"window_menu.right" = "Right (hold ⌥ for corner layouts)";
+"window_menu.top" = "Top (hold ⌥ for corner layouts)";
+"window_menu.bottom" = "Bottom (hold ⌥ for corner layouts)";
+"window_menu.top_left" = "Top Left";
+"window_menu.top_right" = "Top Right";
+"window_menu.bottom_left" = "Bottom Left";
+"window_menu.bottom_right" = "Bottom Right";
+"window_menu.fill" = "Fill";
+"window_menu.halves" = "Arrange Two Windows";
+"window_menu.three_windows" = "Arrange Three Windows";
+"window_menu.quarters" = "Arrange Four Windows";
+"window_menu.enter_full_screen" = "Enter Full Screen";
+"window_menu.exit_full_screen" = "Exit Full Screen";
+"window_menu.full_screen_left" = "Tile Full Screen to the Left";
+"window_menu.full_screen_right" = "Tile Full Screen to the Right";

@@ -7,8 +7,10 @@ import SwiftUI
 @available(macOS 26.0, *)
 final class MorphingGlassSurface: NSView {
     private let glass = GlassHostingView(rootView: BubbleMaterial(path: Path()))
+    private let materialInset: CGFloat
 
-    init(buttonContent: NSView) {
+    init(buttonContent: NSView, materialInset: CGFloat = 0) {
+        self.materialInset = materialInset
         super.init(frame: .zero)
         glass.sizingOptions = []
         glass.safeAreaRegions = []
@@ -28,7 +30,7 @@ final class MorphingGlassSurface: NSView {
 
     func updateGeometry(path: CGPath) {
         glass.frame = bounds
-        glass.rootView = BubbleMaterial(path: Path(path))
+        glass.rootView = BubbleMaterial(path: Path(path), inset: materialInset)
         // Use the same presentation frame as the AppKit buttons. A second
         // implicit animation would let the glass trail behind its hit targets.
         glass.layoutSubtreeIfNeeded()
@@ -43,10 +45,12 @@ private final class GlassHostingView: NSHostingView<BubbleMaterial> {
 @available(macOS 26.0, *)
 private struct BubbleMaterial: View {
     let path: Path
+    var inset: CGFloat = 0
 
     var body: some View {
         Color.clear
             .glassEffect(.regular, in: BubbleShape(outline: path))
+            .padding(inset)
             .environment(\.controlActiveState, .key)
             .allowsHitTesting(false)
             .transaction { transaction in
