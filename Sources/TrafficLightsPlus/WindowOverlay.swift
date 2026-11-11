@@ -61,6 +61,7 @@ final class WindowOverlay {
     private let glassPanel = GlassGroupPanel()
     private var controlStyle = ControlStyle.macOS
     private var glassReveal = GlassGroupRevealState()
+    private var glassMagnification = GlassMagnificationState()
     private(set) var windowFrame = CGRect.zero
     private(set) var title = ""
     private(set) var cgWindowID: CGWindowID?
@@ -420,6 +421,14 @@ final class WindowOverlay {
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                 alwaysVisible: !hiddenModeEnabled && !isMinimizeDismissalInProgress
             )
+            let targetWeights = desiredActions.isEmpty ? [:] : GlassGroupLayout.magnificationWeights(
+                buttonFrames: appKitControlFrames(actions: availableActions), pointer: mouseLocation
+            )
+            glassMagnification.advance(
+                targetWeights: targetWeights,
+                elapsed: presentationTimer == nil ? 0 : elapsed,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            )
         }
         for action in WindowAction.allCases {
             guard availableActions.contains(action) else {
@@ -443,7 +452,7 @@ final class WindowOverlay {
         updatePresentationState(desiredActions: desiredActions)
         renderPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation)
         let needsAnimation = controlStyle == .liquidGlass
-            ? glassReveal.isAnimating || glassReveal.isWaitingToCollapse
+            ? glassReveal.isAnimating || glassReveal.isWaitingToCollapse || glassMagnification.isAnimating
             : Self.needsPresentationAnimation(
                 progress: presentationProgressByAction,
                 availableActions: availableActions,
@@ -559,7 +568,7 @@ final class WindowOverlay {
         })
         let presentation = GlassGroupLayout.presentation(
             nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames,
-            progress: progress, windowFrame: windowFrame
+            progress: progress, windowFrame: windowFrame, magnification: glassMagnification.weights
         )
         let envelope = GlassGroupLayout.presentationEnvelope(
             nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames, windowFrame: windowFrame
@@ -750,6 +759,7 @@ final class WindowOverlay {
 
     private func resetPresentationProgress() {
         glassReveal.reset()
+        glassMagnification.reset()
         for action in WindowAction.allCases { presentationProgressByAction[action] = 0 }
         isRevealEngaged = false
         interactiveActions.removeAll(keepingCapacity: true)
@@ -811,7 +821,8 @@ final class WindowOverlay {
         if isNativeZoomClickInFlight { finishNativeZoomClick(restorePresentation: false) }
         stopPresentationTimer()
         guard presentationState != hiddenState || panels.values.contains(where: \.isVisible)
-                || glassPanel.isVisible || glassReveal.isEngaged || glassReveal.isAnimating else {
+                || glassPanel.isVisible || glassReveal.isEngaged || glassReveal.isAnimating
+                || glassMagnification.isMagnified || glassMagnification.isAnimating else {
             return false
         }
         resetPresentationProgress()

@@ -6,8 +6,8 @@
 "overlay.enabled" = "放大红绿灯";
 "preview.title" = "实时预览";
 "appearance.liquid_glass" = "液态玻璃";
-"appearance.liquid_glass.help" = "三个按钮在同一胶囊中同步展开。macOS 26 及以上使用系统液态玻璃，较早版本使用磨砂背景。";
-"hidden_traffic_lights.glass_group.help" = "指针靠近任意红绿灯时整组展开，在三个按钮之间移动时保持展开。";
+"appearance.liquid_glass.help" = "按钮随指针距离分别放大，相邻按钮平滑让位，玻璃胶囊跟随变形。macOS 26 及以上使用系统液态玻璃，较早版本使用磨砂背景。";
+"hidden_traffic_lights.glass_group.help" = "靠近红绿灯时整组出现，离哪个按钮越近，哪个就越大；移开后平滑缩小并收起。";
 "appearance.title" = "外观";
 "appearance.macos" = "macOS 圆形";
 "appearance.edge_squares" = "左侧贴边方块";

@@ -44,6 +44,9 @@ func verifyGlassSDK() {
     glass.cornerRadius = 999
     glass.tintColor = nil
     glass.contentView = NSView()
+    let container = NSGlassEffectContainerView()
+    container.contentView = NSView()
+    container.spacing = 16
 }
 SWIFT
 

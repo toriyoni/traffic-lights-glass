@@ -117,6 +117,17 @@ final class GlassGroupPanel: NSPanel {
             hasVisibleButton = true
         }
 
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = materialView as? MorphingGlassSurface {
+            glass.updateGeometry(
+                buttonFrames: buttonFrames.mapValues {
+                    $0.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
+                },
+                padding: GlassGroupLayout.padding * visibleProgress
+            )
+        }
+        #endif
+
         guard hasVisibleButton else {
             orderOut(nil)
             return
@@ -175,9 +186,8 @@ final class GlassGroupPanel: NSPanel {
 
     private func layoutMaterialContent() {
         guard let materialView, !materialView.bounds.isEmpty else { return }
-        // NSGlassEffectView supplies the content view's edge constraints.
-        // Do not mix manual frame writes with that layout. The fallback views
-        // have no constraints, so their content follows the material bounds.
+        // The foreground controls share the material's local coordinate space;
+        // native background lobes merge independently beneath that foreground.
         if buttonContentView.translatesAutoresizingMaskIntoConstraints {
             buttonContentView.frame = materialView.bounds
         }
@@ -191,14 +201,7 @@ final class GlassGroupPanel: NSPanel {
         // cannot make an unknown SDK symbol compile.
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.style = .regular
-            glass.cornerRadius = 999
-            glass.tintColor = nil
-            // Apple's glass compositor expects content here, not in a sibling.
-            buttonContentView.translatesAutoresizingMaskIntoConstraints = false
-            buttonContentView.autoresizingMask = []
-            glass.contentView = buttonContentView
+            let glass = MorphingGlassSurface(buttonContent: buttonContentView)
             nativeLightMask = NativeLightMaskView(frame: .zero)
             return glass
         }
