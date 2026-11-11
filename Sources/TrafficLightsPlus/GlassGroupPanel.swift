@@ -11,6 +11,8 @@ final class GlassGroupPanel: NSPanel {
     private var materialView: NSView?
     private var nativeLightMask: NativeLightMaskView?
     private var usesOpaqueMaterial = false
+    private var presentedOutlinePath: CGPath?
+    private var presentedNativeMaskFrames: [NSRect] = []
 
     init(actions: [WindowAction] = WindowAction.allCases) {
         buttonViews = Dictionary(uniqueKeysWithValues: actions.map {
@@ -73,7 +75,9 @@ final class GlassGroupPanel: NSPanel {
         nativeButtonFrames: [NSRect],
         capsuleFrame: NSRect,
         progress: CGFloat,
-        containerFrame: NSRect? = nil
+        containerFrame: NSRect? = nil,
+        pointer: CGPoint? = nil,
+        magnification: CGFloat = 0
     ) {
         guard progress.isFinite, progress > 0,
               Self.isValid(capsuleFrame), !buttonFrames.isEmpty else {
@@ -83,22 +87,31 @@ final class GlassGroupPanel: NSPanel {
         }
 
         let visibleProgress = min(1, max(0, progress))
+        let outline = GlassBubbleOutline(
+            buttonFrames: buttonFrames, capsuleFrame: capsuleFrame,
+            padding: GlassGroupLayout.padding * visibleProgress,
+            pointer: pointer, strength: magnification
+        )
+        let materialFrame = outline.bounds
         // AppKit rounds top-level window frames. Resizing that window on every
         // animation frame shifts the visible center by up to a point, even when
         // the requested center is constant. Animate views in a stationary host.
         let hostFrame = containerFrame.flatMap { Self.isValid($0) ? $0 : nil } ?? capsuleFrame
-        let integralHost = hostFrame.union(capsuleFrame).integral
+        let integralHost = hostFrame.union(materialFrame).integral
         if frame != integralHost { setFrame(integralHost, display: false) }
-        presentedCapsuleFrame = capsuleFrame
-        let localFrame = capsuleFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
+        presentedCapsuleFrame = materialFrame
+        let localFrame = materialFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
         materialView?.frame = localFrame
+        var localTransform = CGAffineTransform(translationX: -materialFrame.minX, y: -materialFrame.minY)
+        presentedOutlinePath = outline.path.copy(using: &localTransform)!
+        updateMaterialOutline()
+        presentedNativeMaskFrames = nativeButtonFrames.filter(Self.isValid).map {
+            $0.offsetBy(dx: -materialFrame.minX, dy: -materialFrame.minY)
+        }
         if let nativeLightMask {
-            let localFrames = nativeButtonFrames.filter(Self.isValid).map {
-                $0.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
-            }
-            if nativeLightMask.frame != localFrame || nativeLightMask.buttonFrames != localFrames {
+            if nativeLightMask.frame != localFrame || nativeLightMask.buttonFrames != presentedNativeMaskFrames {
                 nativeLightMask.frame = localFrame
-                nativeLightMask.buttonFrames = localFrames
+                nativeLightMask.buttonFrames = presentedNativeMaskFrames
                 nativeLightMask.needsDisplay = true
             }
         }
@@ -112,27 +125,16 @@ final class GlassGroupPanel: NSPanel {
                 continue
             }
             view.isHidden = false
-            view.frame = buttonFrame.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
+            view.frame = buttonFrame.offsetBy(dx: -materialFrame.minX, dy: -materialFrame.minY)
             view.controlSize = min(buttonFrame.width, buttonFrame.height)
             hasVisibleButton = true
         }
-
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *), let glass = materialView as? MorphingGlassSurface {
-            glass.updateGeometry(
-                buttonFrames: buttonFrames.mapValues {
-                    $0.offsetBy(dx: -capsuleFrame.minX, dy: -capsuleFrame.minY)
-                },
-                padding: GlassGroupLayout.padding * visibleProgress
-            )
-        }
-        #endif
 
         guard hasVisibleButton else {
             orderOut(nil)
             return
         }
-        (materialView as? RoundedMaterialView)?.updateCornerRadius()
+        (materialView as? RoundedMaterialView)?.updateMask()
         // One fade for the whole surface. Individual controls never cross-fade
         // independently or leave separate colored ghosts during expansion.
         alphaValue = min(1, visibleProgress * 4)
@@ -176,18 +178,33 @@ final class GlassGroupPanel: NSPanel {
         let container = NSView(frame: NSRect(origin: .zero, size: frame.size))
         if let nativeLightMask {
             nativeLightMask.frame = surface.frame
+            nativeLightMask.buttonFrames = presentedNativeMaskFrames
             container.addSubview(nativeLightMask)
         }
         container.addSubview(surface)
         contentView = container
         layoutMaterialContent()
-        (surface as? RoundedMaterialView)?.updateCornerRadius()
+        // Accessibility can replace the material while the pointer is still
+        // and the animation timer is stopped. Restore the visible outline now.
+        updateMaterialOutline()
+        (surface as? RoundedMaterialView)?.updateMask()
+    }
+
+    private func updateMaterialOutline() {
+        guard let path = presentedOutlinePath else { return }
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = materialView as? MorphingGlassSurface {
+            glass.updateGeometry(path: path)
+        }
+        #endif
+        (materialView as? OpaqueCapsuleView)?.outlinePath = path
+        (materialView as? RoundedMaterialView)?.outlinePath = path
     }
 
     private func layoutMaterialContent() {
         guard let materialView, !materialView.bounds.isEmpty else { return }
-        // The foreground controls share the material's local coordinate space;
-        // native background lobes merge independently beneath that foreground.
+        // Both the native glass and fallback surfaces keep button content as a
+        // sibling of the material, with exact frames and no implicit animation.
         if buttonContentView.translatesAutoresizingMaskIntoConstraints {
             buttonContentView.frame = materialView.bounds
         }
@@ -250,29 +267,39 @@ private final class NativeLightMaskView: NSView {
 /// Pre-Tahoe fallback, intentionally one rounded material rather than three
 /// independently blurred windows. Native Liquid Glass is selected above on 26+.
 private final class RoundedMaterialView: NSVisualEffectView {
-    func updateCornerRadius() {
+    var outlinePath: CGPath? { didSet { updateMask() } }
+    private let outlineMask = CAShapeLayer()
+
+    func updateMask() {
         wantsLayer = true
-        layer?.cornerRadius = min(bounds.width, bounds.height) / 2
-        layer?.masksToBounds = true
+        outlineMask.frame = bounds
+        let radius = min(bounds.width, bounds.height) / 2
+        outlineMask.path = outlinePath ?? CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        layer?.mask = outlineMask
     }
 
     override func layout() {
         super.layout()
-        updateCornerRadius()
+        updateMask()
     }
 }
 
 private final class OpaqueCapsuleView: NSView {
+    var outlinePath: CGPath? { didSet { needsDisplay = true } }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
         let radius = min(bounds.width, bounds.height) / 2
-        let capsule = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-        NSColor.windowBackgroundColor.setFill()
-        capsule.fill()
+        let capsule = outlinePath ?? CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        context.addPath(capsule)
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.fillPath()
         if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
-            NSColor.labelColor.withAlphaComponent(0.5).setStroke()
-            capsule.lineWidth = 1
-            capsule.stroke()
+            context.addPath(capsule)
+            context.setStrokeColor(NSColor.labelColor.withAlphaComponent(0.5).cgColor)
+            context.setLineWidth(1)
+            context.strokePath()
         }
     }
 

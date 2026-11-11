@@ -1,29 +1,20 @@
 import AppKit
+import SwiftUI
 
 #if compiler(>=6.2)
-/// Merge a capsule bridge and three variable-radius lobes using Apple's glass
-/// compositor. Keep the colored button glass outside this merging container:
-/// nesting it inside the lobes prevents AppKit from merging their outlines.
+/// SwiftUI's native glass accepts a custom Shape, unlike AppKit's corner-radius
+/// API. Only the outer contour is ours: material, refraction and rim stay native.
 @available(macOS 26.0, *)
 final class MorphingGlassSurface: NSView {
-    private let glassContainer = GlassBackgroundContainer()
-    private let glassContent = NSView()
-    private let bridge = NSGlassEffectView()
-    private let lobes: [WindowAction: NSGlassEffectView]
+    private let glass = GlassHostingView(rootView: BubbleMaterial(path: Path()))
 
     init(buttonContent: NSView) {
-        lobes = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, NSGlassEffectView()) })
         super.init(frame: .zero)
-        glassContainer.contentView = glassContent
-        for glass in [bridge] + Array(lobes.values) {
-            glass.style = .regular
-            glass.cornerRadius = 999
-            glass.tintColor = nil
-            glass.setAccessibilityElement(false)
-            glassContent.addSubview(glass)
-        }
-        addSubview(glassContainer)
-        // The button views still own the exact visible and clickable frames.
+        glass.sizingOptions = []
+        glass.safeAreaRegions = []
+        glass.setAccessibilityElement(false)
+        addSubview(glass)
+        // Keep the existing button material and hit targets above the background.
         addSubview(buttonContent)
     }
 
@@ -32,37 +23,46 @@ final class MorphingGlassSurface: NSView {
 
     override func layout() {
         super.layout()
-        glassContainer.frame = bounds
+        glass.frame = bounds
     }
 
-    func updateGeometry(buttonFrames: [WindowAction: CGRect], padding: CGFloat) {
-        glassContainer.frame = bounds
-        glassContainer.spacing = padding * 2
-        glassContainer.layoutSubtreeIfNeeded()
-        let frames = buttonFrames.values.filter { !$0.isEmpty && !$0.isInfinite && !$0.isNull }
-        guard let union = GlassGroupLayout.capsuleFrame(buttonFrames: buttonFrames, padding: 0),
-              let shortest = frames.map(\.height).min() else { return }
-
-        // At rest the bridge makes one smooth pill. A larger lobe extends out
-        // of it locally; the container supplies the joined rim and refraction.
-        let height = shortest + padding * 2
-        bridge.frame = CGRect(
-            x: union.minX - padding, y: union.midY - height / 2,
-            width: union.width + padding * 2, height: height
-        )
-        for (action, glass) in lobes {
-            guard let frame = buttonFrames[action] else {
-                glass.isHidden = true
-                continue
-            }
-            glass.isHidden = false
-            glass.frame = frame.insetBy(dx: -padding, dy: -padding)
-        }
+    func updateGeometry(path: CGPath) {
+        glass.frame = bounds
+        glass.rootView = BubbleMaterial(path: Path(path))
+        // Use the same presentation frame as the AppKit buttons. A second
+        // implicit animation would let the glass trail behind its hit targets.
+        glass.layoutSubtreeIfNeeded()
     }
 }
 
 @available(macOS 26.0, *)
-private final class GlassBackgroundContainer: NSGlassEffectContainerView {
+private final class GlassHostingView: NSHostingView<BubbleMaterial> {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+@available(macOS 26.0, *)
+private struct BubbleMaterial: View {
+    let path: Path
+
+    var body: some View {
+        Color.clear
+            .glassEffect(.regular, in: BubbleShape(outline: path))
+            .environment(\.controlActiveState, .key)
+            .allowsHitTesting(false)
+            .transaction { transaction in
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
+    }
+}
+
+@available(macOS 26.0, *)
+private struct BubbleShape: Shape {
+    let outline: Path
+
+    func path(in rect: CGRect) -> Path {
+        // AppKit geometry is bottom-up; the SwiftUI shape is top-down.
+        outline.applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.height))
+    }
 }
 #endif

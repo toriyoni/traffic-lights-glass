@@ -141,7 +141,10 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
     for focused in WindowAction.allCases {
         for weight: CGFloat in [0, 0.1, 0.5, 0.9, 1, 0.8, 0.4, 0.1, 0] {
             let p = try #require(GlassGroupLayout.presentation(nativeFrames: magnificationNative, expandedFrames: resting, progress: 1, windowFrame: magnificationWindow, magnification: [focused: weight]))
-            panel.present(buttonFrames: p.buttonFrames, nativeButtonFrames: [], capsuleFrame: p.capsuleFrame, progress: 1, containerFrame: host)
+            let focusedFrame = try #require(resting[focused])
+            panel.present(buttonFrames: p.buttonFrames, nativeButtonFrames: [], capsuleFrame: p.capsuleFrame,
+                progress: 1, containerFrame: host,
+                pointer: CGPoint(x: focusedFrame.midX, y: focusedFrame.midY + 6), magnification: weight)
             panel.contentView?.layoutSubtreeIfNeeded()
             if let fixedFrame { #expect(panel.frame == fixedFrame) }
             fixedFrame = panel.frame

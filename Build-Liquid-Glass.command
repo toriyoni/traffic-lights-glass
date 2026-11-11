@@ -32,6 +32,7 @@ PROBE_DIRECTORY="$(mktemp -d "${TMPDIR:-/tmp}/traffic-lights-glass.XXXXXX")"
 
 cat > "$PROBE_DIRECTORY/GlassSDKProbe.swift" <<'SWIFT'
 import AppKit
+import SwiftUI
 
 #if compiler(<6.2)
 #error("Native Liquid Glass requires the Swift compiler included with Xcode 26 or newer.")
@@ -44,9 +45,11 @@ func verifyGlassSDK() {
     glass.cornerRadius = 999
     glass.tintColor = nil
     glass.contentView = NSView()
-    let container = NSGlassEffectContainerView()
-    container.contentView = NSView()
-    container.spacing = 16
+}
+
+@available(macOS 26.0, *)
+func verifyCustomGlassShape() -> some View {
+    Color.clear.glassEffect(.regular, in: Capsule())
 }
 SWIFT
 

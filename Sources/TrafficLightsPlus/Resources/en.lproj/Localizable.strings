@@ -6,7 +6,7 @@
 "overlay.enabled" = "Enlarged Traffic Lights";
 "preview.title" = "Live Preview";
 "appearance.liquid_glass" = "Liquid Glass";
-"appearance.liquid_glass.help" = "Each button grows with pointer proximity, its neighbors make room, and the glass capsule reshapes around them. macOS 26 or later uses system Liquid Glass; earlier versions use a frosted background.";
+"appearance.liquid_glass.help" = "Each button grows with pointer proximity and its neighbors make room. The glass capsule swells near the pointer like a bubble, with one smooth outline. macOS 26 or later uses system Liquid Glass; earlier versions use a frosted background.";
 "hidden_traffic_lights.glass_group.help" = "Approach the traffic lights to reveal the group. The closer the pointer is to a button, the larger it grows. Move away to shrink and hide the group smoothly.";
 "appearance.title" = "Appearance";
 "appearance.macos" = "macOS Circles";

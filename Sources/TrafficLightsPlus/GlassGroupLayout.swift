@@ -166,6 +166,7 @@ struct GlassGroupLayout {
             windowFrame: windowFrame
         )
         return resting.union(native).union(capsuleFrame(buttonFrames: maximum) ?? resting)
+            .insetBy(dx: -GlassBubbleOutline.maximumOutset, dy: -GlassBubbleOutline.maximumOutset)
     }
 
     private static func isUsable(_ frame: CGRect) -> Bool {
@@ -183,20 +184,37 @@ struct GlassMagnificationState {
     static let responseTime: TimeInterval = 0.055
     private static let settlingTolerance: CGFloat = 0.0001
     private(set) var weights: [WindowAction: CGFloat] = [:]
+    private(set) var pointerLocation: CGPoint?
     private var targets: [WindowAction: CGFloat] = [:]
+    private var targetPointer: CGPoint?
 
     var isAnimating: Bool {
         WindowAction.allCases.contains { (weights[$0] ?? 0) != (targets[$0] ?? 0) }
+            || pointerLocation != targetPointer
     }
     var isMagnified: Bool { weights.values.contains { $0 > 0 } }
 
-    mutating func advance(targetWeights: [WindowAction: CGFloat], elapsed: TimeInterval, reduceMotion: Bool) {
+    mutating func advance(
+        targetWeights: [WindowAction: CGFloat], elapsed: TimeInterval, reduceMotion: Bool,
+        pointer: CGPoint? = nil
+    ) {
         targets = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { action in
             let value = targetWeights[action].flatMap { $0.isFinite ? min(1, max(0, $0)) : nil } ?? 0
             return (action, value)
         })
+        if targets.values.contains(where: { $0 > 0 }), let pointer,
+           pointer.x.isFinite, pointer.y.isFinite {
+            targetPointer = pointer
+            if pointerLocation == nil || !isMagnified { pointerLocation = pointer }
+        } else {
+            // Collapse at the last pressure point, rather than chasing a pointer
+            // that has already left the controls. No idle tracking timer remains.
+            targetPointer = pointerLocation
+        }
         if reduceMotion {
             weights = targets
+            pointerLocation = isMagnified ? targetPointer : nil
+            targetPointer = pointerLocation
             return
         }
         guard elapsed.isFinite, elapsed > 0 else { return }
@@ -207,11 +225,21 @@ struct GlassMagnificationState {
             let next = current + (target - current) * blend
             weights[action] = abs(next - target) < Self.settlingTolerance ? target : next
         }
+        if !isMagnified {
+            pointerLocation = nil
+            targetPointer = nil
+        } else if let current = pointerLocation, let target = targetPointer {
+            let next = CGPoint(x: current.x + (target.x - current.x) * blend,
+                               y: current.y + (target.y - current.y) * blend)
+            pointerLocation = hypot(next.x - target.x, next.y - target.y) < 0.01 ? target : next
+        }
     }
 
     mutating func reset() {
         weights.removeAll(keepingCapacity: true)
         targets.removeAll(keepingCapacity: true)
+        pointerLocation = nil
+        targetPointer = nil
     }
 }
 

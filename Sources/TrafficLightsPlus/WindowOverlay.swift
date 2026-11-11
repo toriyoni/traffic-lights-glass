@@ -427,7 +427,8 @@ final class WindowOverlay {
             glassMagnification.advance(
                 targetWeights: targetWeights,
                 elapsed: presentationTimer == nil ? 0 : elapsed,
-                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                pointer: mouseLocation
             )
         }
         for action in WindowAction.allCases {
@@ -609,11 +610,13 @@ final class WindowOverlay {
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
             progress: progress,
-            containerFrame: container
+            containerFrame: container,
+            pointer: glassMagnification.pointerLocation,
+            magnification: glassMagnification.weights.values.max() ?? 0
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
-        let groupHovered = canInteract && capsule.contains(mouseLocation)
+        let groupHovered = canInteract && (glassPanel.presentedCapsuleFrame ?? capsule).contains(mouseLocation)
         for (action, view) in glassPanel.buttonViews {
             let inside = !glassPanel.ignoresMouseEvents
                 && interactiveActions.contains(action)
