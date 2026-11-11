@@ -16,6 +16,7 @@ struct SettingsView: View {
                 languageSelector
                 menuBarIconToggle
                 overlayToggle
+                applicationList
                 Divider()
                 preview
                 controls
@@ -291,7 +292,7 @@ struct SettingsView: View {
                     .accessibilityLabel(localized(.stageManagerCloseButtons))
             }
 
-            quitOnCloseApplications
+            quitOnCloseToggle
 
             softwareUpdates
 
@@ -355,7 +356,7 @@ struct SettingsView: View {
         }
     }
 
-    private var quitOnCloseApplications: some View {
+    private var quitOnCloseToggle: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(localized(.quitOnCloseEnabled))
@@ -368,56 +369,113 @@ struct SettingsView: View {
                     .accessibilityLabel(localized(.quitOnCloseEnabled))
             }
 
-            if preferences.quitOnCloseEnabled {
-                HStack {
-                    Text(localized(.quitOnCloseApplications))
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Button(action: chooseQuitOnCloseApplication) {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.borderless)
-                    .help(localized(.addApplication))
-                    .accessibilityLabel(localized(.addApplicationAccessibility))
-                }
+            Text(localized(.quitOnCloseHelp))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
-                if preferences.quitOnCloseApplications.isEmpty {
-                    Text(localized(.noApplicationsAdded))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(preferences.quitOnCloseApplications) { application in
-                        HStack(spacing: 10) {
-                            Image(nsImage: icon(for: application))
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 28, height: 28)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(application.displayName)
-                                    .lineLimit(1)
-                                Text(application.bundleIdentifier)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+    private var applicationList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(localized(.applicationList))
+                    .font(.headline)
+                Spacer()
+                Menu {
+                    Section(localized(.runningApplications)) {
+                        ForEach(runningApplications, id: \.processIdentifier) { application in
+                            if let identifier = application.bundleIdentifier {
+                                Button(application.localizedName ?? identifier) {
+                                    preferences.addApplication(
+                                        bundleIdentifier: identifier,
+                                        displayName: application.localizedName ?? identifier
+                                    )
+                                }
+                                .disabled(preferences.applicationRule(bundleIdentifier: identifier) != nil)
                             }
-                            Spacer()
-                            Button {
-                                preferences.removeQuitOnCloseApplication(
-                                    bundleIdentifier: application.bundleIdentifier
-                                )
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                            .help(localized(.removeApplication))
-                            .accessibilityLabel(localized(
-                                .removeApplicationAccessibility,
-                                arguments: application.displayName
-                            ))
                         }
+                    }
+                    Divider()
+                    Button(localized(.chooseApplicationFile), action: chooseApplication)
+                } label: {
+                    Label(localized(.addApplication), systemImage: "plus")
+                }
+                .fixedSize()
+                .accessibilityLabel(localized(.addApplicationAccessibility))
+            }
+
+            Text(localized(.applicationListHelp))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if preferences.applicationRules.isEmpty {
+                Text(localized(.noApplicationsAdded))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(preferences.applicationRules) { application in
+                    applicationRow(application)
+                    if application.id != preferences.applicationRules.last?.id {
+                        Divider()
                     }
                 }
             }
+        }
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func applicationRow(_ application: ApplicationRule) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(nsImage: icon(for: application))
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(application.displayName)
+                        .lineLimit(1)
+                    Text(application.bundleIdentifier)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                Button {
+                    preferences.removeApplication(bundleIdentifier: application.bundleIdentifier)
+                } label: {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .help(localized(.removeApplication))
+                .accessibilityLabel(localized(.removeApplicationAccessibility, arguments: application.displayName))
+            }
+
+            HStack {
+                Text(localized(.overlayEnabled))
+                Spacer(minLength: 8)
+                Picker(localized(.overlayEnabled), selection: Binding(
+                    get: { preferences.overlayMode(bundleIdentifier: application.bundleIdentifier) },
+                    set: { preferences.setOverlayMode($0, bundleIdentifier: application.bundleIdentifier) }
+                )) {
+                    ForEach(ApplicationOverlayMode.allCases) { mode in
+                        Text(mode.title(language: preferences.language)).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                .accessibilityLabel(localized(.applicationOverlayAccessibility, arguments: application.displayName))
+            }
+
+            Toggle(localized(.applicationQuitOnClose), isOn: Binding(
+                get: { preferences.applicationRule(bundleIdentifier: application.bundleIdentifier)?.quitOnClose ?? false },
+                set: { preferences.setQuitOnClose($0, bundleIdentifier: application.bundleIdentifier) }
+            ))
+            .disabled(!preferences.quitOnCloseEnabled)
+            .help(localized(.quitOnCloseHelp))
         }
     }
 
@@ -477,20 +535,37 @@ struct SettingsView: View {
         }
     }
 
-    private func chooseQuitOnCloseApplication() {
+    private func chooseApplication() {
         let panel = NSOpenPanel()
-        panel.title = localized(.chooseQuitOnCloseApplication)
+        panel.title = localized(.chooseApplication)
         panel.prompt = localized(.addPickerPrompt)
         panel.allowedContentTypes = [.applicationBundle]
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        // Allow directory-backed application bundles; the result is still
+        // validated as an .app with a bundle identifier below.
+        panel.canChooseDirectories = true
+        panel.treatsFilePackagesAsDirectories = false
         panel.allowsMultipleSelection = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
 
-        guard panel.runModal() == .OK else { return }
+        // Use a sheet so the picker remains attached to Settings and does not
+        // run a nested modal loop in the menu-bar app.
+        let completion: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK else { return }
+            addApplications(at: panel.urls)
+        }
+        if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.level == .normal }) {
+            panel.beginSheetModal(for: window, completionHandler: completion)
+        } else {
+            panel.begin(completionHandler: completion)
+        }
+    }
 
+    private func addApplications(at urls: [URL]) {
         var encounteredInvalidApplication = false
-        for url in panel.urls {
-            guard let bundle = Bundle(url: url),
+        for url in urls {
+            guard url.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
+                  let bundle = Bundle(url: url),
                   let bundleIdentifier = bundle.bundleIdentifier,
                   !bundleIdentifier.isEmpty else {
                 encounteredInvalidApplication = true
@@ -500,7 +575,7 @@ struct SettingsView: View {
             let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
                 ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
                 ?? url.deletingPathExtension().lastPathComponent
-            _ = preferences.addQuitOnCloseApplication(
+            _ = preferences.addApplication(
                 bundleIdentifier: bundleIdentifier,
                 displayName: displayName
             )
@@ -511,7 +586,17 @@ struct SettingsView: View {
         }
     }
 
-    private func icon(for application: QuitOnCloseApplication) -> NSImage {
+    private var runningApplications: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !$0.isTerminated
+                && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+                && $0.bundleIdentifier != nil
+        }.sorted {
+            ($0.localizedName ?? "").localizedStandardCompare($1.localizedName ?? "") == .orderedAscending
+        }
+    }
+
+    private func icon(for application: ApplicationRule) -> NSImage {
         if let url = NSWorkspace.shared.urlForApplication(
             withBundleIdentifier: application.bundleIdentifier
         ) {

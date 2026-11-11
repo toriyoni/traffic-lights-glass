@@ -51,6 +51,7 @@ final class Preferences: ObservableObject {
         static let minimizeBehavior = "minimizeButtonBehavior"
         static let zoomBehavior = "zoomButtonBehavior"
         static let quitOnCloseApplications = "quitOnCloseApplications"
+        static let applicationRules = "applicationRules"
     }
 
     private let defaults: UserDefaults
@@ -113,10 +114,9 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(zoomBehavior.rawValue, forKey: Key.zoomBehavior) }
     }
 
-    @Published private(set) var quitOnCloseApplications: [QuitOnCloseApplication] {
+    @Published private(set) var applicationRules: [ApplicationRule] {
         didSet {
-            guard let data = try? JSONEncoder().encode(quitOnCloseApplications) else { return }
-            defaults.set(data, forKey: Key.quitOnCloseApplications)
+            persistApplicationRules()
         }
     }
 
@@ -165,7 +165,8 @@ final class Preferences: ObservableObject {
         closeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.closeBehavior) ?? "") ?? .closeWindow
         minimizeBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.minimizeBehavior) ?? "") ?? .minimizeWindow
         zoomBehavior = ButtonBehavior(rawValue: defaults.string(forKey: Key.zoomBehavior) ?? "") ?? .zoomWindow
-        quitOnCloseApplications = Self.loadQuitOnCloseApplications(from: defaults)
+        applicationRules = Self.loadApplicationRules(from: defaults)
+        persistApplicationRules()
     }
 
     // Preserve the user's classic-mode choice while keeping the glass capsule
@@ -192,29 +193,82 @@ final class Preferences: ObservableObject {
         [closeBehavior, minimizeBehavior, zoomBehavior].contains(.closeWindow)
     }
 
+    // The global switch is a default, not a master kill switch: an explicit
+    // per-app enable must keep window observation and pointer handling alive.
+    var hasEnabledOverlays: Bool {
+        enabled || applicationRules.contains { $0.overlayMode == .enabled }
+    }
+
+    func overlayMode(bundleIdentifier: String?) -> ApplicationOverlayMode {
+        applicationRule(bundleIdentifier: bundleIdentifier)?.overlayMode ?? .followGlobal
+    }
+
+    func overlaysEnabled(bundleIdentifier: String?) -> Bool {
+        overlayMode(bundleIdentifier: bundleIdentifier).resolve(globalEnabled: enabled)
+    }
+
+    func shouldTrackApplication(bundleIdentifier: String?) -> Bool {
+        overlaysEnabled(bundleIdentifier: bundleIdentifier)
+            || shouldQuitOnClose(bundleIdentifier: bundleIdentifier)
+    }
+
+    @discardableResult
+    func addApplication(bundleIdentifier: String, displayName: String) -> Bool {
+        let identifier = bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !identifier.isEmpty, applicationRule(bundleIdentifier: identifier) == nil else { return false }
+        applicationRules.append(ApplicationRule(bundleIdentifier: identifier, displayName: displayName))
+        return true
+    }
+
+    func removeApplication(bundleIdentifier: String) {
+        applicationRules.removeAll {
+            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }
+    }
+
+    func setOverlayMode(_ mode: ApplicationOverlayMode, bundleIdentifier: String) {
+        guard let index = applicationRuleIndex(bundleIdentifier: bundleIdentifier) else { return }
+        applicationRules[index].overlayMode = mode
+    }
+
+    func setQuitOnClose(_ enabled: Bool, bundleIdentifier: String) {
+        guard let index = applicationRuleIndex(bundleIdentifier: bundleIdentifier) else { return }
+        applicationRules[index].quitOnClose = enabled
+    }
+
+    func applicationRule(bundleIdentifier: String?) -> ApplicationRule? {
+        guard let bundleIdentifier,
+              let index = applicationRuleIndex(bundleIdentifier: bundleIdentifier) else { return nil }
+        return applicationRules[index]
+    }
+
+    private func applicationRuleIndex(bundleIdentifier: String) -> Int? {
+        applicationRules.firstIndex {
+            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }
+    }
+
+    var quitOnCloseApplications: [QuitOnCloseApplication] {
+        applicationRules.filter(\.quitOnClose).map {
+            QuitOnCloseApplication(bundleIdentifier: $0.bundleIdentifier, displayName: $0.displayName)
+        }
+    }
+
     @discardableResult
     func addQuitOnCloseApplication(bundleIdentifier: String, displayName: String) -> Bool {
-        guard !bundleIdentifier.isEmpty,
-              !quitOnCloseApplications.contains(where: {
-                  $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
-              }) else { return false }
-        quitOnCloseApplications.append(
-            QuitOnCloseApplication(bundleIdentifier: bundleIdentifier, displayName: displayName)
-        )
+        guard applicationRule(bundleIdentifier: bundleIdentifier)?.quitOnClose != true else { return false }
+        _ = addApplication(bundleIdentifier: bundleIdentifier, displayName: displayName)
+        guard applicationRule(bundleIdentifier: bundleIdentifier) != nil else { return false }
+        setQuitOnClose(true, bundleIdentifier: bundleIdentifier)
         return true
     }
 
     func removeQuitOnCloseApplication(bundleIdentifier: String) {
-        quitOnCloseApplications.removeAll {
-            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
-        }
+        setQuitOnClose(false, bundleIdentifier: bundleIdentifier)
     }
 
     func shouldQuitOnClose(bundleIdentifier: String?) -> Bool {
-        guard quitOnCloseEnabled, let bundleIdentifier else { return false }
-        return quitOnCloseApplications.contains {
-            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
-        }
+        quitOnCloseEnabled && applicationRule(bundleIdentifier: bundleIdentifier)?.quitOnClose == true
     }
 
     func effectiveBehavior(for action: WindowAction, bundleIdentifier: String?) -> ButtonBehavior {
@@ -226,9 +280,25 @@ final class Preferences: ObservableObject {
         return .quitApplication
     }
 
-    private static func loadQuitOnCloseApplications(from defaults: UserDefaults) -> [QuitOnCloseApplication] {
-        guard let data = defaults.data(forKey: Key.quitOnCloseApplications),
-              let applications = try? JSONDecoder().decode([QuitOnCloseApplication].self, from: data) else {
+    private func persistApplicationRules() {
+        guard let data = try? JSONEncoder().encode(applicationRules) else { return }
+        defaults.set(data, forKey: Key.applicationRules)
+        // Keep the old membership key readable when rolling back the app binary.
+        if let legacyData = try? JSONEncoder().encode(quitOnCloseApplications) {
+            defaults.set(legacyData, forKey: Key.quitOnCloseApplications)
+        }
+    }
+
+    private static func loadApplicationRules(from defaults: UserDefaults) -> [ApplicationRule] {
+        let applications: [ApplicationRule]
+        if let data = defaults.data(forKey: Key.applicationRules) {
+            applications = (try? JSONDecoder().decode([ApplicationRule].self, from: data)) ?? []
+        } else if let data = defaults.data(forKey: Key.quitOnCloseApplications),
+                  let legacy = try? JSONDecoder().decode([QuitOnCloseApplication].self, from: data) {
+            applications = legacy.map {
+                ApplicationRule(bundleIdentifier: $0.bundleIdentifier, displayName: $0.displayName, quitOnClose: true)
+            }
+        } else {
             return []
         }
 

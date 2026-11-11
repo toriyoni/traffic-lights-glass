@@ -56,6 +56,7 @@ final class WindowOverlay {
     private static let revealDuration = 0.10
 
     let key: AXWindowKey
+    let bundleIdentifier: String?
     private let panels: [WindowAction: OverlayPanel]
     private let glassPanel = GlassGroupPanel()
     private var controlStyle = ControlStyle.macOS
@@ -117,6 +118,7 @@ final class WindowOverlay {
 
     init(key: AXWindowKey) {
         self.key = key
+        bundleIdentifier = NSRunningApplication(processIdentifier: key.pid)?.bundleIdentifier
         window = key.element
         panels = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, OverlayPanel(action: $0)) })
         for (action, panel) in panels {
@@ -178,6 +180,11 @@ final class WindowOverlay {
 
     @discardableResult
     func update(preferences: Preferences, recalibrateNativeCenters: Bool = true) -> Bool {
+        guard preferences.overlaysEnabled(bundleIdentifier: bundleIdentifier) else {
+            isEligibleForDisplay = false
+            hide()
+            return false
+        }
         if controlStyle != preferences.style {
             hide()
             controlStyle = preferences.style
