@@ -8,8 +8,9 @@ import SwiftUI
 final class MorphingGlassSurface: NSView {
     private let glass = GlassHostingView(rootView: BubbleMaterial(path: Path()))
     private let materialInset: CGFloat
+    private var lastPath: CGPath?
 
-    init(buttonContent: NSView, materialInset: CGFloat = 0) {
+    init(buttonContent: NSView? = nil, materialInset: CGFloat = 0) {
         self.materialInset = materialInset
         super.init(frame: .zero)
         glass.sizingOptions = []
@@ -17,7 +18,7 @@ final class MorphingGlassSurface: NSView {
         glass.setAccessibilityElement(false)
         addSubview(glass)
         // Keep the existing button material and hit targets above the background.
-        addSubview(buttonContent)
+        if let buttonContent { addSubview(buttonContent) }
     }
 
     @available(*, unavailable)
@@ -29,8 +30,11 @@ final class MorphingGlassSurface: NSView {
     }
 
     func updateGeometry(path: CGPath) {
-        glass.frame = bounds
-        glass.rootView = BubbleMaterial(path: Path(path), inset: materialInset)
+        if glass.frame != bounds { glass.frame = bounds }
+        if lastPath != path {
+            lastPath = path
+            glass.rootView = BubbleMaterial(path: Path(path), inset: materialInset)
+        }
         // Use the same presentation frame as the AppKit buttons. A second
         // implicit animation would let the glass trail behind its hit targets.
         glass.layoutSubtreeIfNeeded()

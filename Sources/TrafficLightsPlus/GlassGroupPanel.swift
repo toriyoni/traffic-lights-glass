@@ -8,7 +8,7 @@ final class GlassGroupPanel: NSPanel {
     private(set) var presentedCapsuleFrame: NSRect?
     private(set) var presentedButtonFrames: [WindowAction: NSRect] = [:]
 
-    private let buttonContentView = NSView(frame: .zero)
+    private let buttonContentView = GlassButtonContainerView(frame: .zero)
     private var materialView: NSView?
     private var nativeLightMask: NativeLightMaskView?
     private var usesOpaqueMaterial = false
@@ -39,7 +39,12 @@ final class GlassGroupPanel: NSPanel {
         for view in buttonViews.values {
             view.style = .liquidGlass
             buttonContentView.addSubview(view)
+            view.interactionContains = { [weak buttonContentView, weak view] point in
+                guard let buttonContentView, let view else { return false }
+                return buttonContentView.action(at: view.convert(point, to: buttonContentView)) == view.action
+            }
         }
+        buttonContentView.buttons = buttonViews
         installMaterial()
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
@@ -76,7 +81,8 @@ final class GlassGroupPanel: NSPanel {
         nativeButtonFrames: [NSRect],
         capsuleFrame: NSRect,
         progress: CGFloat,
-        containerFrame: NSRect? = nil
+        containerFrame: NSRect? = nil,
+        capsulePath: CGPath? = nil
     ) {
         guard progress.isFinite, progress > 0,
               Self.isValid(capsuleFrame), !buttonFrames.isEmpty else {
@@ -87,26 +93,34 @@ final class GlassGroupPanel: NSPanel {
         }
 
         let visibleProgress = min(1, max(0, progress))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         let materialFrame = capsuleFrame
         let radius = min(capsuleFrame.width, capsuleFrame.height) / 2
-        let outline = CGPath(roundedRect: capsuleFrame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        let outline = capsulePath ?? CGPath(roundedRect: capsuleFrame, cornerWidth: radius, cornerHeight: radius, transform: nil)
         // AppKit rounds top-level window frames. Resizing that window on every
         // animation frame shifts the visible center by up to a point, even when
         // the requested center is constant. Animate views in a stationary host.
         let hostFrame = containerFrame.flatMap { Self.isValid($0) ? $0 : nil } ?? capsuleFrame
-        let integralHost = hostFrame.union(materialFrame).integral
+        let integralHost = hostFrame.union(materialFrame)
+            .insetBy(dx: -GlassGroupLayout.materialBleed, dy: -GlassGroupLayout.materialBleed).integral
         if frame != integralHost { setFrame(integralHost, display: false) }
         presentedCapsuleFrame = materialFrame
         presentedButtonFrames = buttonFrames
-        let localFrame = materialFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
-        materialView?.frame = localFrame
-        var localTransform = CGAffineTransform(translationX: -materialFrame.minX, y: -materialFrame.minY)
+        // Keep both native rendering and input in a fixed canvas. Moving or
+        // resizing a tight hosting view clips the glass rim at fractional pixels.
+        let localFrame = CGRect(origin: .zero, size: frame.size)
+        if materialView?.frame != localFrame { materialView?.frame = localFrame }
+        var localTransform = CGAffineTransform(translationX: -frame.minX, y: -frame.minY)
         presentedOutlinePath = outline.copy(using: &localTransform)!
         updateMaterialOutline()
         presentedNativeMaskFrames = nativeButtonFrames.filter(Self.isValid).map {
-            $0.offsetBy(dx: -materialFrame.minX, dy: -materialFrame.minY)
+            $0.offsetBy(dx: -frame.minX, dy: -frame.minY)
         }
         if let nativeLightMask {
+            nativeLightMask.outlinePath = presentedOutlinePath
+            nativeLightMask.needsDisplay = true
             if nativeLightMask.frame != localFrame || nativeLightMask.buttonFrames != presentedNativeMaskFrames {
                 nativeLightMask.frame = localFrame
                 nativeLightMask.buttonFrames = presentedNativeMaskFrames
@@ -123,8 +137,10 @@ final class GlassGroupPanel: NSPanel {
                 continue
             }
             view.isHidden = false
-            view.frame = buttonFrame.offsetBy(dx: -materialFrame.minX, dy: -materialFrame.minY)
-            view.controlSize = min(buttonFrame.width, buttonFrame.height)
+            let local = buttonFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
+            if view.frame != local { view.frame = local }
+            let size = min(buttonFrame.width, buttonFrame.height)
+            if view.controlSize != size { view.controlSize = size }
             hasVisibleButton = true
         }
 
@@ -164,22 +180,22 @@ final class GlassGroupPanel: NSPanel {
         let surface: NSView
         if usesOpaqueMaterial {
             let opaque = OpaqueCapsuleView(frame: .zero)
-            opaque.addSubview(buttonContentView)
             surface = opaque
         } else {
             surface = makeGlassMaterial()
         }
-        surface.frame = presentedCapsuleFrame?.offsetBy(dx: -frame.minX, dy: -frame.minY)
-            ?? NSRect(origin: .zero, size: frame.size)
+        surface.frame = NSRect(origin: .zero, size: frame.size)
         surface.autoresizingMask = []
         materialView = surface
         let container = NSView(frame: NSRect(origin: .zero, size: frame.size))
         if let nativeLightMask {
             nativeLightMask.frame = surface.frame
             nativeLightMask.buttonFrames = presentedNativeMaskFrames
+            nativeLightMask.outlinePath = presentedOutlinePath
             container.addSubview(nativeLightMask)
         }
         container.addSubview(surface)
+        container.addSubview(buttonContentView)
         contentView = container
         layoutMaterialContent()
         // Accessibility can replace the material while the pointer is still
@@ -216,7 +232,7 @@ final class GlassGroupPanel: NSPanel {
         // cannot make an unknown SDK symbol compile.
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
-            let glass = MorphingGlassSurface(buttonContent: buttonContentView)
+            let glass = MorphingGlassSurface()
             nativeLightMask = NativeLightMaskView(frame: .zero)
             return glass
         }
@@ -226,7 +242,6 @@ final class GlassGroupPanel: NSPanel {
         material.material = .popover
         material.blendingMode = .behindWindow
         material.state = .active
-        material.addSubview(buttonContentView)
         return material
     }
 
@@ -237,18 +252,37 @@ final class GlassGroupPanel: NSPanel {
     }
 }
 
+/// Input is continuous across visual gaps; drawing still uses separate circles.
+private final class GlassButtonContainerView: NSView {
+    var buttons: [WindowAction: OverlayButtonView] = [:]
+
+    func action(at point: CGPoint) -> WindowAction? {
+        let frames = buttons.filter { !$0.value.isHidden }.mapValues(\.frame)
+        return GlassGroupLayout.hoveredAction(buttonFrames: frames, pointer: point)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard let action = action(at: local) else { return nil }
+        return buttons[action]
+    }
+}
+
 /// Cover only the original lights so the system glass samples a neutral
 /// backdrop there. The glass still samples the surrounding title bar.
 private final class NativeLightMaskView: NSView {
     var buttonFrames: [NSRect] = []
+    var outlinePath: CGPath?
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
         guard !buttonFrames.isEmpty else { return }
-        let radius = min(bounds.width, bounds.height) / 2
         NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).addClip()
+        if let outlinePath, let context = NSGraphicsContext.current?.cgContext {
+            context.addPath(outlinePath)
+            context.clip()
+        }
         NSColor.windowBackgroundColor.setFill()
         for frame in buttonFrames {
             NSBezierPath(ovalIn: frame.insetBy(dx: -1, dy: -1)).fill()

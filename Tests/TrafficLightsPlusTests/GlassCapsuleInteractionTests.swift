@@ -18,16 +18,16 @@ private func restingLights(size: CGFloat = 23) -> [WindowAction: CGRect] {
             #expect(p.buttonFrames[action] == resting[action])
         }
         if selected == .close {
-            #expect(p.capsuleFrame.minX < base.minX - 8)
-            #expect(p.capsuleFrame.maxX == base.maxX)
-            #expect(p.buttonFrames[selected]?.maxX == resting[selected]?.maxX)
+            #expect(p.capsuleFrame.minX < base.minX)
+            #expect(p.buttonFrames[selected]!.maxX > resting[selected]!.maxX)
         } else {
-            #expect(p.capsuleFrame.minX == base.minX)
-            #expect(p.capsuleFrame.maxX > base.maxX + 8)
-            #expect(p.buttonFrames[selected]?.minX == resting[selected]?.minX)
+            #expect(p.capsuleFrame.maxX > base.maxX)
+            #expect(p.buttonFrames[selected]!.minX < resting[selected]!.minX)
         }
+        let endCenter = selected == .close ? p.capsule.start : p.capsule.end
+        #expect(endCenter == CGPoint(x: p.buttonFrames[selected]!.midX, y: p.buttonFrames[selected]!.midY))
         #expect(p.capsuleFrame.midY == base.midY)
-        #expect(p.capsuleFrame.height < base.height + 5)
+        #expect(p.capsuleFrame.height < base.height + 7)
     }
 }
 
@@ -40,7 +40,8 @@ private func restingLights(size: CGFloat = 23) -> [WindowAction: CGRect] {
     #expect(red.size == resting[.close]?.size && green.size == resting[.zoom]?.size)
     #expect(red.midX < resting[.close]!.midX && green.midX > resting[.zoom]!.midX)
     #expect(abs(resting[.close]!.midX - red.midX - (green.midX - resting[.zoom]!.midX)) < 0.000001)
-    #expect(abs(yellow.minX - red.maxX - GlassGroupLayout.gap) < 0.000001)
+    #expect(yellow.minX - red.maxX < GlassGroupLayout.gap)
+    #expect(yellow.minX - red.maxX >= GlassGroupLayout.minimumHoverGap)
     #expect(p.capsuleFrame.midX == base.midX)
     #expect(p.capsuleFrame.minX < base.minX && p.capsuleFrame.maxX > base.maxX)
 }
@@ -65,7 +66,8 @@ private func restingLights(size: CGFloat = 23) -> [WindowAction: CGRect] {
                 if action != selected { #expect(p.buttonFrames[action] == target[action]) }
             }
             let base = try #require(GlassGroupLayout.magnifiedPresentation(restingFrames: resting, weights: weights, windowFrame: interactionBounds))
-            #expect(abs(p.capsuleFrame.midX - base.capsuleFrame.midX - offset.x * GlassGroupLayout.capsuleAttraction) < 0.000001)
+            #expect(p.capsule.radius == base.capsule.radius)
+            if selected == .minimize { #expect(p.capsuleFrame == base.capsuleFrame) }
         }
     }
 }
@@ -82,8 +84,7 @@ func roundCapsuleEnclosesEveryLightDuringStateChanges(size: CGFloat) throws {
                     let offsets: [WindowAction: CGPoint] = [target: CGPoint(x: 1.4 * t, y: dy * t)]
                     let p = try #require(GlassGroupLayout.presentation(nativeFrames: resting, expandedFrames: resting,
                         progress: 1, windowFrame: interactionBounds, magnification: weights, attractions: offsets))
-                    let radius = p.capsuleFrame.height / 2
-                    let path = CGPath(roundedRect: p.capsuleFrame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+                    let path = p.capsule.path
                     #expect(envelope.contains(p.capsuleFrame))
                     for frame in p.buttonFrames.values {
                         for angle in 0..<64 {

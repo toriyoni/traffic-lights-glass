@@ -292,6 +292,8 @@ final class WindowOverlay {
                 controlSize: controlSize,
                 windowFrame: frame
             )
+            frames = GlassGroupLayout.reservingHoverClearance(restingFrames: frames,
+                displayFrame: glassDisplayBounds(for: frames))
         }
 
         report("pid=\(key.pid) controls=\(buttons.count)")
@@ -623,18 +625,22 @@ final class WindowOverlay {
 
         let canInteract = !isNativeZoomClickInFlight
             && !isMinimizeDismissalInProgress && !desiredActions.isEmpty
-        let pointerInsideControl = frames.contains { action, frame in
-            desiredActions.contains(action) && GlassGroupLayout.contains(mouseLocation, in: frame)
-        }
+        let hoveredAction = GlassGroupLayout.hoveredAction(buttonFrames: frames, pointer: mouseLocation)
+        let pointerInsideControl = hoveredAction.map { desiredActions.contains($0) } ?? false
         // Keep the whole capsule revealed, while allowing title-bar clicks and
-        // drags through its padding, inter-button gaps, and transparent corners.
+        // drags through its outer padding and transparent corners. The gaps
+        // between lights belong to their neighboring controls.
         glassPanel.ignoresMouseEvents = !canInteract || !pointerInsideControl
+        var toAppKit = CGAffineTransform(a: 1, b: 0, c: 0, d: -1,
+            tx: capsule.minX - presentation.capsuleFrame.minX,
+            ty: capsule.maxY + presentation.capsuleFrame.minY)
         glassPanel.present(
             buttonFrames: frames,
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
             progress: progress,
-            containerFrame: container
+            containerFrame: container,
+            capsulePath: presentation.capsule.path.copy(using: &toAppKit)
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
@@ -642,14 +648,14 @@ final class WindowOverlay {
         for (action, view) in glassPanel.buttonViews {
             let inside = !glassPanel.ignoresMouseEvents
                 && interactiveActions.contains(action)
-                && frames[action].map { GlassGroupLayout.contains(mouseLocation, in: $0) } == true
+                && hoveredAction == action
             view.setPointerInside(inside)
             // Keep the three symbols visible across the padding and gaps too.
             view.isGroupHovered = groupHovered && interactiveActions.contains(action)
         }
         if let hoveredZoomMenuAction,
            (!interactiveActions.contains(hoveredZoomMenuAction)
-               || frames[hoveredZoomMenuAction].map { GlassGroupLayout.contains(mouseLocation, in: $0) } != true) {
+               || hoveredAction != hoveredZoomMenuAction) {
             cancelZoomMenuRequest(clearTriggeredState: true)
         }
         lastDesiredActions = desiredActions
@@ -803,7 +809,11 @@ final class WindowOverlay {
         // An edge light expands outwards, even a few points past the target
         // window's edge. Clamp to the display, rather than pushing all three
         // lights to the right whenever the red light grows.
-        guard let light = WindowAction.allCases.compactMap({ preparedCGFrames[$0] }).first else { return windowFrame }
+        glassDisplayBounds(for: preparedCGFrames)
+    }
+
+    private func glassDisplayBounds(for frames: [WindowAction: CGRect]) -> CGRect {
+        guard let light = WindowAction.allCases.compactMap({ frames[$0] }).first else { return windowFrame }
         for screen in NSScreen.screens {
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { continue }
             let bounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))

@@ -355,15 +355,15 @@ func glassPanelDoesNotRoundItsCenterDuringEaseOut(size: CGFloat) throws {
             nativeFrames: native, expandedFrames: expanded, progress: progress, windowFrame: window
         ))
         panel.present(buttonFrames: presentation.buttonFrames, nativeButtonFrames: Array(native.values),
-                      capsuleFrame: presentation.capsuleFrame, progress: progress, containerFrame: host)
+                      capsuleFrame: presentation.capsuleFrame, progress: progress, containerFrame: host,
+                      capsulePath: presentation.capsule.path)
         panel.contentView?.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.002))
         if let windowFrame { #expect(panel.frame == windowFrame) }
         windowFrame = panel.frame
-        let material = try #require(panel.contentView?.subviews.last)
-        let visible = panel.convertToScreen(material.convert(material.bounds, to: nil))
-        #expect(abs(visible.midX - presentation.capsuleFrame.midX) < 0.000001)
-        #expect(abs(visible.midY - presentation.capsuleFrame.midY) < 0.000001)
+        #expect(panel.presentedCapsuleFrame == presentation.capsuleFrame)
+        let content = try #require(panel.contentView)
+        #expect(content.subviews.allSatisfy { $0.frame == content.bounds })
         for (action, view) in panel.buttonViews {
             let center = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: panel.contentView)
             #expect(panel.contentView?.hitTest(center) === view)

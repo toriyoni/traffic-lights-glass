@@ -26,6 +26,9 @@ final class OverlayButtonView: NSView {
     var actionHandler: ((WindowAction) -> Void)?
     var hoverHandler: ((Bool) -> Void)?
     var pressHandler: ((WindowAction) -> Void)?
+    // A grouped glass control shares the small visual gaps with its neighbors.
+    // Points are in this view's coordinates, and may lie outside its bounds.
+    var interactionContains: ((NSPoint) -> Bool)?
 
     var isColorVisible: Bool { isWindowActive || isGroupHovered || isHovered || isPressed }
     var isPointerHighlightVisible: Bool { isGroupHovered || isHovered || isPressed }
@@ -35,6 +38,7 @@ final class OverlayButtonView: NSView {
         isHovered = inside
         if !inside { isPressed = false }
         refreshAppearance()
+        if interactionContains != nil { hoverHandler?(inside) }
     }
 
     func resetInteractionState() {
@@ -106,11 +110,13 @@ final class OverlayButtonView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
+        guard interactionContains == nil else { return }
         setPointerInside(true)
         hoverHandler?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
+        guard interactionContains == nil else { return }
         setPointerInside(false)
         hoverHandler?(false)
     }
@@ -127,8 +133,9 @@ final class OverlayButtonView: NSView {
             isPressed = false
             refreshAppearance()
         }
+        let point = convert(event.locationInWindow, from: nil)
         guard isPressed, isControlEnabled,
-              bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+              interactionContains?(point) ?? bounds.contains(point) else { return }
         // Consume the press before invoking code that can hide this panel.
         isPressed = false
         actionHandler?(action)

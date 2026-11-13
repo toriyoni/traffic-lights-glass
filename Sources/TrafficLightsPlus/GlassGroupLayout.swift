@@ -10,7 +10,10 @@ struct GlassGroupLayout {
     static let retentionPadding: CGFloat = 8
     static let maximumMagnification: CGFloat = 1.45
     static let maximumAttraction: CGFloat = 2
-    static let capsuleAttraction: CGFloat = 0.25
+    // Leave at least one point of visual separation even at full attraction.
+    static let minimumHoverGap: CGFloat = 3
+    static let gapCompression: CGFloat = 0.8
+    static let materialBleed: CGFloat = 16
     private static let windowInset: CGFloat = 4
 
     static func expandedFrames(
@@ -64,20 +67,55 @@ struct GlassGroupLayout {
         return union.insetBy(dx: -safePadding, dy: -safePadding)
     }
 
-    struct Presentation {
-        let buttonFrames: [WindowAction: CGRect]
-        let capsuleFrame: CGRect
+    /// Reserve edge clearance once in the resting layout. Entering a hover
+    /// state must not make display clamping reposition the untouched lights.
+    static func reservingHoverClearance(
+        restingFrames: [WindowAction: CGRect], displayFrame: CGRect
+    ) -> [WindowAction: CGRect] {
+        guard let resting = capsuleFrame(buttonFrames: restingFrames), isUsable(displayFrame) else { return restingFrames }
+        let unconstrained = resting.insetBy(dx: -resting.width * 4, dy: -resting.height * 4)
+        var required = resting
+        for action in restingFrames.keys {
+            if let p = magnifiedPresentation(restingFrames: restingFrames, weights: [action: 1], windowFrame: unconstrained) {
+                required = required.union(p.capsuleFrame)
+            }
+        }
+        let available = displayFrame.insetBy(dx: windowInset, dy: windowInset)
+        let dx = required.width <= available.width
+            ? min(max(required.minX, available.minX), available.maxX - required.width) - required.minX : 0
+        let dy = required.height <= available.height
+            ? min(max(required.minY, available.minY), available.maxY - required.height) - required.minY : 0
+        return restingFrames.mapValues { $0.offsetBy(dx: dx, dy: dy) }
     }
 
-    /// Enter a light's actual circular surface to select it. Gaps and capsule
-    /// padding have no target, and distance never partially enlarges a neighbor.
+    struct Presentation {
+        let buttonFrames: [WindowAction: CGRect]
+        let capsule: GlassCapsuleGeometry
+        var capsuleFrame: CGRect { capsule.frame }
+    }
+
+    /// The circular lights and the short bridges between them form one input
+    /// lane. The outer padding stays transparent to title-bar clicks.
+    static func hoveredAction(buttonFrames: [WindowAction: CGRect], pointer: CGPoint) -> WindowAction? {
+        guard pointer.x.isFinite, pointer.y.isFinite else { return nil }
+        let actions = WindowAction.allCases.filter { buttonFrames[$0].map(isUsable) == true }
+        if let action = actions.first(where: { contains(pointer, in: buttonFrames[$0]!) }) { return action }
+        for (left, right) in zip(actions, actions.dropFirst()) {
+            let a = buttonFrames[left]!, b = buttonFrames[right]!
+            guard pointer.x >= a.midX, pointer.x <= b.midX, b.midX > a.midX else { continue }
+            let fraction = (pointer.x - a.midX) / (b.midX - a.midX)
+            let y = a.midY + (b.midY - a.midY) * fraction
+            guard abs(pointer.y - y) <= min(a.height, b.height) / 2 else { continue }
+            return pointer.x < (a.maxX + b.minX) / 2 ? left : right
+        }
+        return nil
+    }
+
     static func magnificationWeights(
         buttonFrames: [WindowAction: CGRect], pointer: CGPoint
     ) -> [WindowAction: CGFloat] {
         guard pointer.x.isFinite, pointer.y.isFinite else { return [:] }
-        let selected = WindowAction.allCases.first { action in
-            buttonFrames[action].map { contains(pointer, in: $0) } == true
-        }
+        let selected = hoveredAction(buttonFrames: buttonFrames, pointer: pointer)
         return Dictionary(uniqueKeysWithValues: buttonFrames.keys.map { ($0, $0 == selected ? 1 : 0) })
     }
 
@@ -126,6 +164,13 @@ struct GlassGroupLayout {
         }
         let middle = actions.count / 2
         let odd = !actions.count.isMultiple(of: 2)
+        let compression = zip(growth, growth.dropFirst()).map {
+            min(gap - minimumHoverGap, ($0 + $1) / 2 * gapCompression)
+        }
+        // With a missing middle light, only the growing side should consume
+        // the shared gap. Splitting it equally would move the untouched light.
+        let rightShare = odd ? 0 : compression[middle - 1] * growth[middle]
+            / max(0.000001, growth[middle - 1] + growth[middle])
         let unmagnetized = Dictionary(uniqueKeysWithValues: actions.enumerated().map { index, action in
             let frame = restingFrames[action]!
             let diameter = max(frame.width, frame.height) + growth[index]
@@ -135,39 +180,46 @@ struct GlassGroupLayout {
             } else if index < middle {
                 shift = -(growth[index] / 2 + growth[(index + 1)..<middle].reduce(0, +)
                           + (odd ? growth[middle] / 2 : 0))
+                    + compression[index..<middle].reduce(0, +)
+                    - rightShare
             } else {
                 let start = odd ? middle + 1 : middle
                 shift = growth[index] / 2 + growth[start..<index].reduce(0, +)
                     + (odd ? growth[middle] / 2 : 0)
+                    - compression[middle..<index].reduce(0, +)
+                    - rightShare
             }
             return (action, CGRect(x: frame.midX + shift - diameter / 2,
                                    y: frame.midY - diameter / 2, width: diameter, height: diameter))
         })
-        let offsets = attractions.mapValues(clampedAttraction)
-        let frames = unmagnetized.map { action, frame in
-            let offset = offsets[action] ?? .zero
-            return (action, frame.offsetBy(dx: offset.x, dy: offset.y))
+        guard let first = actions.first, let last = actions.last else { return nil }
+        let strength = actions.map { min(1, max(0, weights[$0].flatMap { $0.isFinite ? $0 : nil } ?? 0)) }.max() ?? 0
+        // Radius depends on size, never the vertical pointer position. Keep a
+        // generous clear rim instead of repeatedly resizing it while circling.
+        let radius = (unmagnetized.values.map(\.height).max() ?? resting.height) / 2 + padding - 2 * strength
+        func capsule(for frames: [WindowAction: CGRect]) -> GlassCapsuleGeometry {
+            let a = frames[first]!, b = frames[last]!
+            return GlassCapsuleGeometry(start: CGPoint(x: a.midX, y: a.midY), end: CGPoint(x: b.midX, y: b.midY), radius: radius)
         }
-        let bodyOffset = offsets.filter { actions.contains($0.key) }.values.reduce(CGPoint.zero) {
-            CGPoint(x: $0.x + $1.x * capsuleAttraction, y: $0.y + $1.y * capsuleAttraction)
-        }
-        guard let horizontal = capsuleFrame(buttonFrames: unmagnetized) else { return nil }
-        let centerY = resting.midY + bodyOffset.y
-        // Retain a real, symmetric capsule. Only a little extra height is needed
-        // for the larger light; no local bulge or tapered side is constructed.
-        let height = frames.reduce(resting.height + (growth.max() ?? 0) * 0.35) {
-            max($0, 2 * (abs($1.1.midY - centerY) + $1.1.height / 2 + 4))
-        }
-        let capsule = CGRect(x: horizontal.minX + bodyOffset.x, y: centerY - height / 2,
-                             width: horizontal.width, height: height)
+        let baseCapsule = capsule(for: unmagnetized).frame
         let inset = windowFrame.insetBy(dx: windowInset, dy: windowInset)
-        let dx = capsule.width <= inset.width
-            ? min(max(capsule.minX, inset.minX), inset.maxX - capsule.width) - capsule.minX : 0
-        let dy = capsule.height <= inset.height
-            ? min(max(capsule.minY, inset.minY), inset.maxY - capsule.height) - capsule.minY : 0
-        return Presentation(buttonFrames: Dictionary(uniqueKeysWithValues: frames.map {
-            ($0.0, $0.1.offsetBy(dx: dx, dy: dy))
-        }), capsuleFrame: capsule.offsetBy(dx: dx, dy: dy))
+        let dx = baseCapsule.width <= inset.width
+            ? min(max(baseCapsule.minX, inset.minX), inset.maxX - baseCapsule.width) - baseCapsule.minX : 0
+        let dy = baseCapsule.height <= inset.height
+            ? min(max(baseCapsule.minY, inset.minY), inset.maxY - baseCapsule.height) - baseCapsule.minY : 0
+        let frames = Dictionary(uniqueKeysWithValues: unmagnetized.map { action, frame in
+            let base = frame.offsetBy(dx: dx, dy: dy)
+            let offset = clampedAttraction(attractions[action] ?? .zero)
+            var x = base.midX + offset.x, y = base.midY + offset.y
+            // Apply display constraints before attraction, then limit only the
+            // moving light. The other lights never inherit its correction.
+            if action == first || action == last {
+                if baseCapsule.width <= inset.width { x = min(inset.maxX - radius, max(inset.minX + radius, x)) }
+                if baseCapsule.height <= inset.height { y = min(inset.maxY - radius, max(inset.minY + radius, y)) }
+            }
+            return (action, base.offsetBy(dx: x - base.midX, dy: y - base.midY))
+        })
+        return Presentation(buttonFrames: frames, capsule: capsule(for: frames))
     }
 
     /// Interpolate position and size together so every button travels directly
@@ -184,8 +236,7 @@ struct GlassGroupLayout {
         let amount = min(1, max(0, progress))
         var result: [WindowAction: CGRect] = [:]
         guard let target = magnifiedPresentation(restingFrames: expandedFrames, weights: magnification,
-                windowFrame: windowFrame, attractions: attractions),
-              let nativeCapsule = capsuleFrame(buttonFrames: nativeFrames, padding: 0) else { return nil }
+                windowFrame: windowFrame, attractions: attractions) else { return nil }
         for (action, expanded) in target.buttonFrames {
             guard let native = nativeFrames[action], isUsable(native), isUsable(expanded) else { continue }
             result[action] = CGRect(
@@ -195,24 +246,25 @@ struct GlassGroupLayout {
                 height: native.height + (expanded.height - native.height) * amount
             )
         }
-        let capsule = CGRect(
-            x: nativeCapsule.minX + (target.capsuleFrame.minX - nativeCapsule.minX) * amount,
-            y: nativeCapsule.minY + (target.capsuleFrame.minY - nativeCapsule.minY) * amount,
-            width: nativeCapsule.width + (target.capsuleFrame.width - nativeCapsule.width) * amount,
-            height: nativeCapsule.height + (target.capsuleFrame.height - nativeCapsule.height) * amount
-        )
+        guard let first = WindowAction.allCases.first(where: { result[$0] != nil }),
+              let last = WindowAction.allCases.last(where: { result[$0] != nil }) else { return nil }
+        let nativeRadius = nativeFrames.values.filter(isUsable).map { $0.height / 2 }.max() ?? 0
+        let capsule = GlassCapsuleGeometry(start: CGPoint(x: result[first]!.midX, y: result[first]!.midY),
+            end: CGPoint(x: result[last]!.midX, y: result[last]!.midY),
+            radius: nativeRadius + (target.capsule.radius - nativeRadius) * amount)
+        let bounds = capsule.frame
         var offset = CGPoint.zero
 
         // Keep the group inside a normal window without squashing its buttons.
-        if capsule.width <= windowFrame.width {
-            offset.x = min(max(capsule.minX, windowFrame.minX), windowFrame.maxX - capsule.width) - capsule.minX
+        if bounds.width <= windowFrame.width {
+            offset.x = min(max(bounds.minX, windowFrame.minX), windowFrame.maxX - bounds.width) - bounds.minX
         }
-        if capsule.height <= windowFrame.height {
-            offset.y = min(max(capsule.minY, windowFrame.minY), windowFrame.maxY - capsule.height) - capsule.minY
+        if bounds.height <= windowFrame.height {
+            offset.y = min(max(bounds.minY, windowFrame.minY), windowFrame.maxY - bounds.height) - bounds.minY
         }
         return Presentation(
             buttonFrames: result.mapValues { $0.offsetBy(dx: offset.x, dy: offset.y) },
-            capsuleFrame: capsule.offsetBy(dx: offset.x, dy: offset.y)
+            capsule: capsule.offsetBy(dx: offset.x, dy: offset.y)
         )
     }
 

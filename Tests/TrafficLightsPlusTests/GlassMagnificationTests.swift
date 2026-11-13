@@ -18,19 +18,20 @@ private let magnificationNative: [WindowAction: CGRect] = [
             #expect(target[action] == 1)
             #expect(target.filter { $0.value > 0 }.count == 1)
         }
-        // Rectangular corners are not part of the circular button.
-        let corner = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: frame.origin)
-        #expect(corner.values.allSatisfy { $0 == 0 })
+        #expect(!GlassGroupLayout.contains(frame.origin, in: frame))
     }
     #expect(GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: CGFloat.nan, y: 0)).isEmpty)
 }
 
-@Test func movingThroughGapsHasDistinctUnmagnifiedIntervals() throws {
+@Test func movingThroughGapsAlwaysSelectsOneNeighbor() throws {
     let frames = GlassGroupLayout.expandedFrames(nativeFrames: magnificationNative, controlSize: 28, windowFrame: magnificationWindow)
     let close = try #require(frames[.close]), middle = try #require(frames[.minimize]), green = try #require(frames[.zoom])
-    for x in [close.minX - 2, (close.maxX + middle.minX) / 2, (middle.maxX + green.minX) / 2, green.maxX + 2] {
+    for x in [(close.maxX + middle.minX) / 2, (middle.maxX + green.minX) / 2] {
         let target = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: x, y: close.midY))
-        #expect(target.values.allSatisfy { $0 == 0 })
+        #expect(target.values.filter { $0 == 1 }.count == 1)
+    }
+    for x in [close.minX - 2, green.maxX + 2] {
+        #expect(GlassGroupLayout.hoveredAction(buttonFrames: frames, pointer: CGPoint(x: x, y: close.midY)) == nil)
     }
 }
 
@@ -45,8 +46,10 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
                 for c: CGFloat in [0, 0.5, 1] {
                     let weights: [WindowAction: CGFloat] = [.close: a, .minimize: b, .zoom: c]
                     let frames = GlassGroupLayout.magnifiedFrames(restingFrames: resting, weights: weights, windowFrame: magnificationWindow)
-                    #expect(abs(try #require(frames[.minimize]).minX - #require(frames[.close]).maxX - GlassGroupLayout.gap) < 0.000001)
-                    #expect(abs(try #require(frames[.zoom]).minX - #require(frames[.minimize]).maxX - GlassGroupLayout.gap) < 0.000001)
+                    for (left, right) in [(WindowAction.close, WindowAction.minimize), (.minimize, .zoom)] {
+                        let gap = try #require(frames[right]).minX - #require(frames[left]).maxX
+                        #expect(gap >= GlassGroupLayout.minimumHoverGap - 0.000001 && gap <= GlassGroupLayout.gap + 0.000001)
+                    }
                     for progress: CGFloat in [0, 0.2, 0.65, 0.99, 1] {
                         let p = try #require(GlassGroupLayout.presentation(nativeFrames: native, expandedFrames: resting, progress: progress, windowFrame: magnificationWindow, magnification: weights))
                         #expect(magnificationWindow.contains(p.capsuleFrame))
@@ -66,6 +69,13 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
     #expect(frames[.close]?.width == 28)
     #expect(abs(try #require(frames[.zoom]).width - 28 * GlassGroupLayout.maximumMagnification) < 0.000001)
     #expect(GlassGroupLayout.magnifiedFrames(restingFrames: [:], weights: [:], windowFrame: magnificationWindow).isEmpty)
+    let reserved = GlassGroupLayout.reservingHoverClearance(restingFrames: resting, displayFrame: magnificationWindow)
+    for selected in [WindowAction.close, .zoom] {
+        let other: WindowAction = selected == .close ? .zoom : .close
+        let pair = GlassGroupLayout.magnifiedFrames(restingFrames: reserved, weights: [selected: 1], windowFrame: magnificationWindow)
+        #expect(abs(try #require(pair[other]).midX - #require(reserved[other]).midX) < 0.000001)
+        #expect(pair[other]?.size == reserved[other]?.size)
+    }
 }
 
 @Test func magnificationEasesOutInBothDirectionsAndFinishesExactly() {
@@ -134,7 +144,7 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
         for weight: CGFloat in [0, 0.1, 0.5, 0.9, 1, 0.8, 0.4, 0.1, 0] {
             let p = try #require(GlassGroupLayout.presentation(nativeFrames: magnificationNative, expandedFrames: resting, progress: 1, windowFrame: magnificationWindow, magnification: [focused: weight]))
             panel.present(buttonFrames: p.buttonFrames, nativeButtonFrames: [], capsuleFrame: p.capsuleFrame,
-                progress: 1, containerFrame: host)
+                progress: 1, containerFrame: host, capsulePath: p.capsule.path)
             panel.contentView?.layoutSubtreeIfNeeded()
             if let fixedFrame { #expect(panel.frame == fixedFrame) }
             fixedFrame = panel.frame
