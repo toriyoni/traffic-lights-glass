@@ -1,0 +1,6 @@
+immediate old frame (345.0, 858.0, 164.0, 90.0) visibleMaxY 948.0 deltaY -22.0
+immediate new frame (345.0, 880.0, 164.0, 90.0) visibleMaxY 948.0 deltaY 0.0
+after80ms old frame (345.0, 858.0, 164.0, 90.0) visibleMaxY 948.0 deltaY -22.0
+after80ms new frame (345.0, 880.0, 164.0, 90.0) visibleMaxY 948.0 deltaY 0.0
+secondPresent old frame (345.0, 858.0, 164.0, 90.0) visibleMaxY 948.0 deltaY 0.0
+secondPresent new frame (345.0, 880.0, 164.0, 90.0) visibleMaxY 948.0 deltaY 0.0

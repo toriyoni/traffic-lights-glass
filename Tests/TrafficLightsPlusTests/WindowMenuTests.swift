@@ -79,3 +79,17 @@ import Testing
     menu.dismiss()
     #expect(dismissals == 1)
 }
+
+@MainActor
+@Test func menuShadowCanCrossTheMenuBarWithoutMovingTheVisibleMenu() throws {
+    let screen = try #require(NSScreen.screens.first)
+    let anchor = CGRect(x: screen.visibleFrame.minX + 200, y: screen.visibleFrame.maxY - 20, width: 16, height: 16)
+    let menu = ZoomMenuPanel(anchor: anchor, visibleScreen: screen.visibleFrame,
+        snapshot: WindowMenuSnapshot(enabled: [.fullScreen], isFullScreen: false), language: .english, appearance: nil)
+    defer { menu.dismiss() }
+    menu.present()
+    #expect(menu.frame == menu.placement.frame.insetBy(dx: -ZoomMenuPanel.shadowInset, dy: -ZoomMenuPanel.shadowInset))
+    #expect(menu.frame.maxY > screen.visibleFrame.maxY)
+    #expect(menu.placement.frame.maxY < anchor.minY)
+    #expect(!menu.receivesMouse(at: CGPoint(x: anchor.midX, y: anchor.midY)))
+}

@@ -9,6 +9,7 @@ final class MorphingGlassSurface: NSView {
     private let glass = GlassHostingView(rootView: BubbleMaterial(path: Path()))
     private let materialInset: CGFloat
     private var lastPath: CGPath?
+    private var lastCanvasHeight: CGFloat?
 
     init(buttonContent: NSView? = nil, materialInset: CGFloat = 0) {
         self.materialInset = materialInset
@@ -31,9 +32,14 @@ final class MorphingGlassSurface: NSView {
 
     func updateGeometry(path: CGPath) {
         if glass.frame != bounds { glass.frame = bounds }
-        if lastPath != path {
+        let height = max(0, bounds.height - materialInset * 2)
+        if lastPath != path || lastCanvasHeight != height {
             lastPath = path
-            glass.rootView = BubbleMaterial(path: Path(path), inset: materialInset)
+            lastCanvasHeight = height
+            // Use the known AppKit canvas height, not a transient SwiftUI
+            // proposal from the first layout pass of a newly shown window.
+            let flipped = Path(path).applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: height))
+            glass.rootView = BubbleMaterial(path: flipped, inset: materialInset)
         }
         // Use the same presentation frame as the AppKit buttons. A second
         // implicit animation would let the glass trail behind its hit targets.
@@ -69,8 +75,7 @@ private struct BubbleShape: Shape {
     let outline: Path
 
     func path(in rect: CGRect) -> Path {
-        // AppKit geometry is bottom-up; the SwiftUI shape is top-down.
-        outline.applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: rect.height))
+        outline
     }
 }
 #endif

@@ -62,6 +62,7 @@ final class WindowOverlay {
     private var controlStyle = ControlStyle.macOS
     private var glassReveal = GlassGroupRevealState()
     private var glassMagnification = GlassMagnificationState()
+    private var glassPointerLight = GlassPointerLightState()
     private(set) var windowFrame = CGRect.zero
     private(set) var title = ""
     private(set) var cgWindowID: CGWindowID?
@@ -434,26 +435,24 @@ final class WindowOverlay {
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                 alwaysVisible: !hiddenModeEnabled && !isMinimizeDismissalInProgress
             )
-            if zoomMenuPanel?.isVisible != true {
-                let hitFrames = glassPanel.isVisible ? glassPanel.presentedButtonFrames
-                    : appKitNativeControlFrames(actions: availableActions)
-                let targetWeights = desiredActions.isEmpty ? [:] : GlassGroupLayout.magnificationWeights(
-                    buttonFrames: hitFrames.filter { availableActions.contains($0.key) }, pointer: mouseLocation
-                )
-                let targetCGFrames = GlassGroupLayout.magnifiedFrames(restingFrames: preparedCGFrames,
-                    weights: targetWeights, windowFrame: glassPresentationBounds)
-                let targetFrames = targetCGFrames.compactMapValues { appKitFrame(for: $0) }
-                let attractions = GlassGroupLayout.magneticOffsets(buttonFrames: targetFrames,
-                    weights: targetWeights, pointer: mouseLocation)
-                glassMagnification.advance(
-                    targetWeights: targetWeights,
-                    elapsed: presentationTimer == nil ? 0 : elapsed,
-                    reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                    // Layout uses top-down CG coordinates; the pointer above
-                    // was tested against the actual bottom-up AppKit controls.
-                    targetAttractions: attractions.mapValues { CGPoint(x: $0.x, y: -$0.y) }
-                )
-            }
+            let hitFrames = glassPanel.isVisible ? glassPanel.presentedButtonFrames
+                : appKitNativeControlFrames(actions: availableActions)
+            let targetWeights = desiredActions.isEmpty ? [:] : GlassGroupLayout.magnificationWeights(
+                buttonFrames: hitFrames.filter { availableActions.contains($0.key) }, pointer: mouseLocation
+            )
+            let targetCGFrames = GlassGroupLayout.magnifiedFrames(restingFrames: preparedCGFrames,
+                weights: targetWeights, windowFrame: glassPresentationBounds)
+            let targetFrames = targetCGFrames.compactMapValues { appKitFrame(for: $0) }
+            let attractions = GlassGroupLayout.magneticOffsets(buttonFrames: targetFrames,
+                weights: targetWeights, pointer: mouseLocation)
+            glassMagnification.advance(
+                targetWeights: targetWeights,
+                elapsed: presentationTimer == nil ? 0 : elapsed,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                // Layout uses top-down CG coordinates; the pointer above
+                // was tested against the actual bottom-up AppKit controls.
+                targetAttractions: attractions.mapValues { CGPoint(x: $0.x, y: -$0.y) }
+            )
         }
         for action in WindowAction.allCases {
             guard availableActions.contains(action) else {
@@ -475,10 +474,10 @@ final class WindowOverlay {
         }
 
         updatePresentationState(desiredActions: desiredActions)
-        renderPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation)
+        renderPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation, elapsed: elapsed)
         let needsAnimation = controlStyle == .liquidGlass
             ? glassReveal.isAnimating || glassReveal.isWaitingToCollapse
-                || (zoomMenuPanel?.isVisible != true && glassMagnification.isAnimating)
+                || glassMagnification.isAnimating || glassPointerLight.isAnimating
             : Self.needsPresentationAnimation(
                 progress: presentationProgressByAction,
                 availableActions: availableActions,
@@ -504,12 +503,13 @@ final class WindowOverlay {
 
     private func renderPresentation(
         desiredActions: Set<WindowAction>,
-        mouseLocation: NSPoint
+        mouseLocation: NSPoint,
+        elapsed: TimeInterval
     ) {
         // Keep the native controls exposed until the posted click is delivered.
         guard !nativeZoomPanelsHidden else { return }
         if controlStyle == .liquidGlass {
-            renderGlassPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation)
+            renderGlassPresentation(desiredActions: desiredActions, mouseLocation: mouseLocation, elapsed: elapsed)
             return
         }
         if glassPanel.isVisible { glassPanel.orderOut(nil) }
@@ -583,7 +583,8 @@ final class WindowOverlay {
 
     private func renderGlassPresentation(
         desiredActions: Set<WindowAction>,
-        mouseLocation: NSPoint
+        mouseLocation: NSPoint,
+        elapsed: TimeInterval
     ) {
         hoverResetWorkItem?.cancel()
         hoverResetWorkItem = nil
@@ -609,10 +610,11 @@ final class WindowOverlay {
             frames[action] = frame
             if let nativeFrame = appKitFrame(for: native) { nativeFrames.append(nativeFrame) }
         }
-        guard progress > 0,
+        guard (progress > 0 || !desiredActions.isEmpty),
               let presentation, let envelope,
               let capsule = appKitFrame(for: presentation.capsuleFrame),
               let container = appKitFrame(for: envelope) else {
+            glassPointerLight.reset()
             glassPanel.ignoresMouseEvents = true
             glassPanel.orderOut(nil)
             glassPanel.buttonViews.values.forEach { $0.resetInteractionState() }
@@ -623,7 +625,7 @@ final class WindowOverlay {
             return
         }
 
-        let canInteract = !isNativeZoomClickInFlight
+        let canInteract = progress > 0 && !isNativeZoomClickInFlight
             && !isMinimizeDismissalInProgress && !desiredActions.isEmpty
         let hoveredAction = GlassGroupLayout.hoveredAction(buttonFrames: frames, pointer: mouseLocation)
         let pointerInsideControl = hoveredAction.map { desiredActions.contains($0) } ?? false
@@ -634,13 +636,18 @@ final class WindowOverlay {
         var toAppKit = CGAffineTransform(a: 1, b: 0, c: 0, d: -1,
             tx: capsule.minX - presentation.capsuleFrame.minX,
             ty: capsule.maxY + presentation.capsuleFrame.minY)
+        let outline = presentation.capsule.path.copy(using: &toAppKit)!
+        glassPointerLight.advance(pointer: mouseLocation,
+            inside: canInteract && outline.contains(mouseLocation), elapsed: presentationTimer == nil ? 0 : elapsed,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         glassPanel.present(
             buttonFrames: frames,
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
             progress: progress,
             containerFrame: container,
-            capsulePath: presentation.capsule.path.copy(using: &toAppKit)
+            capsulePath: outline,
+            light: glassPointerLight.sample
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
@@ -792,6 +799,7 @@ final class WindowOverlay {
     private func resetPresentationProgress() {
         glassReveal.reset()
         glassMagnification.reset()
+        glassPointerLight.reset()
         for action in WindowAction.allCases { presentationProgressByAction[action] = 0 }
         isRevealEngaged = false
         interactiveActions.removeAll(keepingCapacity: true)
@@ -872,7 +880,8 @@ final class WindowOverlay {
         stopPresentationTimer()
         guard presentationState != hiddenState || panels.values.contains(where: \.isVisible)
                 || glassPanel.isVisible || glassReveal.isEngaged || glassReveal.isAnimating
-                || glassMagnification.isMagnified || glassMagnification.isAnimating else {
+                || glassMagnification.isMagnified || glassMagnification.isAnimating
+                || glassPointerLight.sample != nil || glassPointerLight.isAnimating else {
             return false
         }
         resetPresentationProgress()
@@ -1095,9 +1104,8 @@ final class WindowOverlay {
         }
         zoomMenuPanel = menu
         menu.present()
-        // Freeze the visible group while interacting with its menu. The menu
-        // uses a captured screen rectangle, never the moving pointer position.
-        stopPresentationTimer()
+        // Only the menu's captured anchor stays fixed. Button magnification,
+        // attraction and input remain independent while this panel is open.
     }
 
     private func dismissCustomZoomMenu() {

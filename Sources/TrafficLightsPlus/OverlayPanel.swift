@@ -53,6 +53,24 @@ final class OverlayButtonView: NSView {
     private var isPressed = false
     private var trackingAreaRef: NSTrackingArea?
     private var glassSurface: NSView?
+    private var pointerLight: GlassLightSample?
+    private var fallbackLightGeometry: GlassLightGeometry?
+
+    func updatePointerLight(_ sample: GlassLightSample?) {
+        guard sample != nil || pointerLight != nil else { return }
+        pointerLight = sample
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let glass = glassSurface as? NSGlassEffectView { glass.contentView?.needsDisplay = true }
+        #endif
+        if glassSurface == nil { needsDisplay = true }
+    }
+
+    private func drawPointerLight(in view: NSView, geometry: GlassLightGeometry) {
+        guard let sample = pointerLight, let window = view.window, let context = NSGraphicsContext.current?.cgContext else { return }
+        let point = view.convert(window.convertPoint(fromScreen: sample.position), from: nil)
+        let local = GlassLightSample(position: point, intensity: sample.intensity * (isControlEnabled ? 1 : 0.35))
+        geometry.draw(sample: local, dark: view.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua, in: context)
+    }
 
     init(action: WindowAction) {
         self.action = action
@@ -202,7 +220,12 @@ final class OverlayButtonView: NSView {
                     glass.setAccessibilityElement(false)
                     glass.setAccessibilityChildren([])
                     let symbol = GlassControlSymbolView(frame: .zero)
+                    symbol.wantsLayer = true
                     symbol.setAccessibilityElement(false)
+                    symbol.drawLight = { [weak self, weak symbol] geometry in
+                        guard let self, let symbol else { return }
+                        self.drawPointerLight(in: symbol, geometry: geometry)
+                    }
                     symbol.drawSymbol = { [weak self] bounds in
                         guard let self, self.shouldDrawGlassSymbol else { return }
                         // The material is inset by 1 pt. Keep the glyph's size
@@ -300,6 +323,10 @@ final class OverlayButtonView: NSView {
         NSColor.black.withAlphaComponent(highContrast ? 0.48 : 0.13).setStroke()
         circle.lineWidth = highContrast ? 1.25 : 0.65
         circle.stroke()
+
+        let lightPath = CGPath(ellipseIn: circleRect, transform: nil)
+        if fallbackLightGeometry?.path != lightPath { fallbackLightGeometry = GlassLightGeometry(path: lightPath) }
+        if let fallbackLightGeometry { drawPointerLight(in: self, geometry: fallbackLightGeometry) }
 
         if shouldDrawGlassSymbol {
             drawSymbol(in: rect)
@@ -426,6 +453,8 @@ private final class GlassControlMaterialView: NSGlassEffectView {
 
 private final class GlassControlSymbolView: NSView {
     var drawSymbol: ((NSRect) -> Void)?
+    var drawLight: ((GlassLightGeometry) -> Void)?
+    private var lightGeometry: GlassLightGeometry?
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -436,6 +465,9 @@ private final class GlassControlSymbolView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        NSGraphicsContext.current?.cgContext.clear(dirtyRect)
+        if lightGeometry?.bounds != bounds { lightGeometry = GlassLightGeometry(path: CGPath(ellipseIn: bounds, transform: nil)) }
+        if let lightGeometry { drawLight?(lightGeometry) }
         drawSymbol?(bounds)
     }
 }

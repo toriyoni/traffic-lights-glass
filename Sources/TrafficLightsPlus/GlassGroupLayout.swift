@@ -10,6 +10,7 @@ struct GlassGroupLayout {
     static let retentionPadding: CGFloat = 8
     static let maximumMagnification: CGFloat = 1.45
     static let maximumAttraction: CGFloat = 2
+    static let middleCapsuleAttraction: CGFloat = 0.3
     // Leave at least one point of visual separation even at full attraction.
     static let minimumHoverGap: CGFloat = 3
     static let gapCompression: CGFloat = 0.8
@@ -219,7 +220,13 @@ struct GlassGroupLayout {
             }
             return (action, base.offsetBy(dx: x - base.midX, dy: y - base.midY))
         })
-        return Presentation(buttonFrames: frames, capsule: capsule(for: frames))
+        let outline = capsule(for: frames)
+        // The middle light nudges the material, without moving either neighbor.
+        // End-light attraction still defines concentric endcaps when selected.
+        let middleOffset = actions.count == 3
+            ? clampedAttraction(attractions[actions[1]] ?? .zero).y * middleCapsuleAttraction : 0
+        let bob = min(inset.maxY - outline.frame.maxY, max(inset.minY - outline.frame.minY, middleOffset))
+        return Presentation(buttonFrames: frames, capsule: outline.offsetBy(dx: 0, dy: middleOffset == 0 ? 0 : bob))
     }
 
     /// Interpolate position and size together so every button travels directly
@@ -249,8 +256,10 @@ struct GlassGroupLayout {
         guard let first = WindowAction.allCases.first(where: { result[$0] != nil }),
               let last = WindowAction.allCases.last(where: { result[$0] != nil }) else { return nil }
         let nativeRadius = nativeFrames.values.filter(isUsable).map { $0.height / 2 }.max() ?? 0
-        let capsule = GlassCapsuleGeometry(start: CGPoint(x: result[first]!.midX, y: result[first]!.midY),
-            end: CGPoint(x: result[last]!.midX, y: result[last]!.midY),
+        let startOffset = target.capsule.start.y - target.buttonFrames[first]!.midY
+        let endOffset = target.capsule.end.y - target.buttonFrames[last]!.midY
+        let capsule = GlassCapsuleGeometry(start: CGPoint(x: result[first]!.midX, y: result[first]!.midY + startOffset * amount),
+            end: CGPoint(x: result[last]!.midX, y: result[last]!.midY + endOffset * amount),
             radius: nativeRadius + (target.capsule.radius - nativeRadius) * amount)
         let bounds = capsule.frame
         var offset = CGPoint.zero

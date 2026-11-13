@@ -113,6 +113,11 @@ final class ZoomMenuPanel: NSPanel {
     required init?(coder: NSCoder) { nil }
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // Placement constrains the visible menu, while its transparent shadow
+        // can overlap the menu-bar margin without shifting the anchor/hit map.
+        frameRect
+    }
     @objc(_hasActiveAppearance) private func glassHasActiveAppearance() -> Bool { true }
 
     deinit {

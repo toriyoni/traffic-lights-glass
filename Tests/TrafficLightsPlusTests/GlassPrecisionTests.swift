@@ -42,8 +42,13 @@ func circlingALightNeverMovesItsNeighborsEvenAtDisplayEdges(size: CGFloat) throw
                     #expect(p.buttonFrames[other] == base.buttonFrames[other])
                 }
                 #expect(p.capsule.radius == base.capsule.radius)
-                #expect(p.capsule.start == CGPoint(x: p.buttonFrames[.close]!.midX, y: p.buttonFrames[.close]!.midY))
-                #expect(p.capsule.end == CGPoint(x: p.buttonFrames[.zoom]!.midX, y: p.buttonFrames[.zoom]!.midY))
+                if selected != .minimize {
+                    #expect(p.capsule.start == CGPoint(x: p.buttonFrames[.close]!.midX, y: p.buttonFrames[.close]!.midY))
+                    #expect(p.capsule.end == CGPoint(x: p.buttonFrames[.zoom]!.midX, y: p.buttonFrames[.zoom]!.midY))
+                } else {
+                    #expect(abs(p.capsule.start.y - p.buttonFrames[.close]!.midY) <= 0.600001)
+                    #expect(abs(p.capsule.end.y - p.buttonFrames[.zoom]!.midY) <= 0.600001)
+                }
                 #expect(screen.contains(p.capsuleFrame))
             }
         }

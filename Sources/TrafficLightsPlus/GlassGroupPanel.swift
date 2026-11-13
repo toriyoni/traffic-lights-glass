@@ -9,6 +9,7 @@ final class GlassGroupPanel: NSPanel {
     private(set) var presentedButtonFrames: [WindowAction: NSRect] = [:]
 
     private let buttonContentView = GlassButtonContainerView(frame: .zero)
+    private let pointerLightView = GlassPointerLightView(frame: .zero)
     private var materialView: NSView?
     private var nativeLightMask: NativeLightMaskView?
     private var usesOpaqueMaterial = false
@@ -35,6 +36,8 @@ final class GlassGroupPanel: NSPanel {
         acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
         animationBehavior = .none
+        pointerLightView.setAccessibilityElement(false)
+        pointerLightView.wantsLayer = true
 
         for view in buttonViews.values {
             view.style = .liquidGlass
@@ -60,6 +63,13 @@ final class GlassGroupPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // Only the transparent rendering margin may extend above the usable
+        // screen. AppKit must not relocate the whole overlay on its first show;
+        // GlassGroupLayout already positions the visible controls themselves.
+        frameRect
+    }
+
     // This panel deliberately never takes keyboard focus. AppKit otherwise
     // treats its NSGlassEffectView as inactive and suppresses the native rim
     // highlight, even while the window underneath is active. This appearance-
@@ -82,9 +92,10 @@ final class GlassGroupPanel: NSPanel {
         capsuleFrame: NSRect,
         progress: CGFloat,
         containerFrame: NSRect? = nil,
-        capsulePath: CGPath? = nil
+        capsulePath: CGPath? = nil,
+        light: GlassLightSample? = nil
     ) {
-        guard progress.isFinite, progress > 0,
+        guard progress.isFinite, progress >= 0,
               Self.isValid(capsuleFrame), !buttonFrames.isEmpty else {
             presentedCapsuleFrame = nil
             presentedButtonFrames = [:]
@@ -93,9 +104,9 @@ final class GlassGroupPanel: NSPanel {
         }
 
         let visibleProgress = min(1, max(0, progress))
+        if !isVisible { alphaValue = 0 }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        defer { CATransaction.commit() }
         let materialFrame = capsuleFrame
         let radius = min(capsuleFrame.width, capsuleFrame.height) / 2
         let outline = capsulePath ?? CGPath(roundedRect: capsuleFrame, cornerWidth: radius, cornerHeight: radius, transform: nil)
@@ -115,6 +126,8 @@ final class GlassGroupPanel: NSPanel {
         var localTransform = CGAffineTransform(translationX: -frame.minX, y: -frame.minY)
         presentedOutlinePath = outline.copy(using: &localTransform)!
         updateMaterialOutline()
+        if pointerLightView.frame != localFrame { pointerLightView.frame = localFrame }
+        pointerLightView.update(path: presentedOutlinePath!, sample: light?.offsetBy(dx: -frame.minX, dy: -frame.minY))
         presentedNativeMaskFrames = nativeButtonFrames.filter(Self.isValid).map {
             $0.offsetBy(dx: -frame.minX, dy: -frame.minY)
         }
@@ -141,18 +154,26 @@ final class GlassGroupPanel: NSPanel {
             if view.frame != local { view.frame = local }
             let size = min(buttonFrame.width, buttonFrame.height)
             if view.controlSize != size { view.controlSize = size }
+            view.updatePointerLight(light)
             hasVisibleButton = true
         }
 
         guard hasVisibleButton else {
+            CATransaction.commit()
             orderOut(nil)
             return
         }
         (materialView as? RoundedMaterialView)?.updateMask()
+        buttonContentView.layoutSubtreeIfNeeded()
+        CATransaction.commit()
+        // Commit geometry before exposing the window. A zero-progress call
+        // primes the hidden first frame exactly over the native small controls.
+        contentView?.displayIfNeeded()
+        CATransaction.flush()
         // One fade for the whole surface. Individual controls never cross-fade
         // independently or leave separate colored ghosts during expansion.
-        alphaValue = min(1, visibleProgress * 4)
         if !isVisible { orderFrontRegardless() }
+        alphaValue = min(1, visibleProgress * 4)
     }
 
     @objc private func accessibilityAppearanceDidChange(_ notification: Notification) {
@@ -174,6 +195,7 @@ final class GlassGroupPanel: NSPanel {
         usesOpaqueMaterial = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         nativeLightMask = nil
         buttonContentView.removeFromSuperview()
+        pointerLightView.removeFromSuperview()
         buttonContentView.translatesAutoresizingMaskIntoConstraints = true
         buttonContentView.autoresizingMask = [.width, .height]
 
@@ -195,6 +217,8 @@ final class GlassGroupPanel: NSPanel {
             container.addSubview(nativeLightMask)
         }
         container.addSubview(surface)
+        pointerLightView.frame = container.bounds
+        container.addSubview(pointerLightView)
         container.addSubview(buttonContentView)
         contentView = container
         layoutMaterialContent()

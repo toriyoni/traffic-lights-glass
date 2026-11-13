@@ -67,7 +67,10 @@ private func restingLights(size: CGFloat = 23) -> [WindowAction: CGRect] {
             }
             let base = try #require(GlassGroupLayout.magnifiedPresentation(restingFrames: resting, weights: weights, windowFrame: interactionBounds))
             #expect(p.capsule.radius == base.capsule.radius)
-            if selected == .minimize { #expect(p.capsuleFrame == base.capsuleFrame) }
+            if selected == .minimize {
+                #expect(p.capsuleFrame.midX == base.capsuleFrame.midX)
+                #expect(abs(p.capsuleFrame.midY - base.capsuleFrame.midY - offset.y * GlassGroupLayout.middleCapsuleAttraction) < 0.000001)
+            }
         }
     }
 }
