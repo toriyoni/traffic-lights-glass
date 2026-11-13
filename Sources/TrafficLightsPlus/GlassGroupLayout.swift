@@ -9,7 +9,8 @@ struct GlassGroupLayout {
     static let activationPadding: CGFloat = 10
     static let retentionPadding: CGFloat = 8
     static let maximumMagnification: CGFloat = 1.45
-    static let influenceRadiusInPitches: CGFloat = 1.35
+    static let maximumAttraction: CGFloat = 2
+    static let capsuleAttraction: CGFloat = 0.25
     private static let windowInset: CGFloat = 4
 
     static func expandedFrames(
@@ -68,47 +69,105 @@ struct GlassGroupLayout {
         let capsuleFrame: CGRect
     }
 
-    /// Sample the resting layout, never the moving/enlarged hit targets. This
-    /// keeps a stationary pointer from feeding geometry changes back into size.
+    /// Enter a light's actual circular surface to select it. Gaps and capsule
+    /// padding have no target, and distance never partially enlarges a neighbor.
     static func magnificationWeights(
         buttonFrames: [WindowAction: CGRect], pointer: CGPoint
     ) -> [WindowAction: CGFloat] {
         guard pointer.x.isFinite, pointer.y.isFinite else { return [:] }
-        return buttonFrames.filter { isUsable($0.value) }.mapValues { frame in
-            let radius = (max(frame.width, frame.height) + gap) * influenceRadiusInPitches
-            let distance = hypot(pointer.x - frame.midX, pointer.y - frame.midY)
-            guard distance < radius else { return 0 }
-            // A compact cosine bell has no jump at either the peak or cutoff.
-            return (1 + cos(.pi * distance / radius)) / 2
+        let selected = WindowAction.allCases.first { action in
+            buttonFrames[action].map { contains(pointer, in: $0) } == true
         }
+        return Dictionary(uniqueKeysWithValues: buttonFrames.keys.map { ($0, $0 == selected ? 1 : 0) })
+    }
+
+    static func contains(_ pointer: CGPoint, in frame: CGRect) -> Bool {
+        guard isUsable(frame), pointer.x.isFinite, pointer.y.isFinite else { return false }
+        return hypot((pointer.x - frame.midX) / (frame.width / 2),
+                     (pointer.y - frame.midY) / (frame.height / 2)) <= 1
+    }
+
+    /// Measure against the selected state's unmagnetized target, not last
+    /// frame's moving center. This prevents attraction from feeding itself.
+    static func magneticOffsets(
+        buttonFrames: [WindowAction: CGRect], weights: [WindowAction: CGFloat], pointer: CGPoint
+    ) -> [WindowAction: CGPoint] {
+        guard pointer.x.isFinite, pointer.y.isFinite else { return [:] }
+        return Dictionary(uniqueKeysWithValues: buttonFrames.compactMap { action, frame in
+            guard isUsable(frame), (weights[action] ?? 0) > 0 else { return nil }
+            let dx = (pointer.x - frame.midX) / (frame.width / 2)
+            let dy = (pointer.y - frame.midY) / (frame.height / 2)
+            let scale = maximumAttraction / max(1, hypot(dx, dy))
+            return (action, CGPoint(x: dx * scale, y: dy * scale))
+        })
     }
 
     static func magnifiedFrames(
         restingFrames: [WindowAction: CGRect],
         weights: [WindowAction: CGFloat],
-        windowFrame: CGRect
+        windowFrame: CGRect,
+        attractions: [WindowAction: CGPoint] = [:]
     ) -> [WindowAction: CGRect] {
+        magnifiedPresentation(restingFrames: restingFrames, weights: weights,
+                              windowFrame: windowFrame, attractions: attractions)?.buttonFrames ?? [:]
+    }
+
+    static func magnifiedPresentation(
+        restingFrames: [WindowAction: CGRect], weights: [WindowAction: CGFloat],
+        windowFrame: CGRect, attractions: [WindowAction: CGPoint] = [:]
+    ) -> Presentation? {
         guard isUsable(windowFrame),
-              let resting = capsuleFrame(buttonFrames: restingFrames, padding: 0) else { return [:] }
+              let resting = capsuleFrame(buttonFrames: restingFrames) else { return nil }
         let actions = WindowAction.allCases.filter { restingFrames[$0].map(isUsable) == true }
-        let diameters = actions.map { action -> CGFloat in
+        let growth = actions.map { action -> CGFloat in
             let frame = restingFrames[action]!
             let weight = weights[action].flatMap { $0.isFinite ? min(1, max(0, $0)) : nil } ?? 0
-            return max(frame.width, frame.height) * (1 + (maximumMagnification - 1) * weight)
+            return max(frame.width, frame.height) * (maximumMagnification - 1) * weight
         }
-        let width = diameters.reduce(0, +) + CGFloat(max(0, actions.count - 1)) * gap
-        var left = resting.midX - width / 2
-        let frames = Dictionary(uniqueKeysWithValues: zip(actions, diameters).map { action, diameter in
-            defer { left += diameter + gap }
-            return (action, CGRect(x: left, y: resting.midY - diameter / 2, width: diameter, height: diameter))
+        let middle = actions.count / 2
+        let odd = !actions.count.isMultiple(of: 2)
+        let unmagnetized = Dictionary(uniqueKeysWithValues: actions.enumerated().map { index, action in
+            let frame = restingFrames[action]!
+            let diameter = max(frame.width, frame.height) + growth[index]
+            let shift: CGFloat
+            if odd && index == middle {
+                shift = 0
+            } else if index < middle {
+                shift = -(growth[index] / 2 + growth[(index + 1)..<middle].reduce(0, +)
+                          + (odd ? growth[middle] / 2 : 0))
+            } else {
+                let start = odd ? middle + 1 : middle
+                shift = growth[index] / 2 + growth[start..<index].reduce(0, +)
+                    + (odd ? growth[middle] / 2 : 0)
+            }
+            return (action, CGRect(x: frame.midX + shift - diameter / 2,
+                                   y: frame.midY - diameter / 2, width: diameter, height: diameter))
         })
-        guard let capsule = capsuleFrame(buttonFrames: frames) else { return [:] }
+        let offsets = attractions.mapValues(clampedAttraction)
+        let frames = unmagnetized.map { action, frame in
+            let offset = offsets[action] ?? .zero
+            return (action, frame.offsetBy(dx: offset.x, dy: offset.y))
+        }
+        let bodyOffset = offsets.filter { actions.contains($0.key) }.values.reduce(CGPoint.zero) {
+            CGPoint(x: $0.x + $1.x * capsuleAttraction, y: $0.y + $1.y * capsuleAttraction)
+        }
+        guard let horizontal = capsuleFrame(buttonFrames: unmagnetized) else { return nil }
+        let centerY = resting.midY + bodyOffset.y
+        // Retain a real, symmetric capsule. Only a little extra height is needed
+        // for the larger light; no local bulge or tapered side is constructed.
+        let height = frames.reduce(resting.height + (growth.max() ?? 0) * 0.35) {
+            max($0, 2 * (abs($1.1.midY - centerY) + $1.1.height / 2 + 4))
+        }
+        let capsule = CGRect(x: horizontal.minX + bodyOffset.x, y: centerY - height / 2,
+                             width: horizontal.width, height: height)
         let inset = windowFrame.insetBy(dx: windowInset, dy: windowInset)
         let dx = capsule.width <= inset.width
             ? min(max(capsule.minX, inset.minX), inset.maxX - capsule.width) - capsule.minX : 0
         let dy = capsule.height <= inset.height
             ? min(max(capsule.minY, inset.minY), inset.maxY - capsule.height) - capsule.minY : 0
-        return frames.mapValues { $0.offsetBy(dx: dx, dy: dy) }
+        return Presentation(buttonFrames: Dictionary(uniqueKeysWithValues: frames.map {
+            ($0.0, $0.1.offsetBy(dx: dx, dy: dy))
+        }), capsuleFrame: capsule.offsetBy(dx: dx, dy: dy))
     }
 
     /// Interpolate position and size together so every button travels directly
@@ -118,15 +177,16 @@ struct GlassGroupLayout {
         expandedFrames: [WindowAction: CGRect],
         progress: CGFloat,
         windowFrame: CGRect,
-        magnification: [WindowAction: CGFloat] = [:]
+        magnification: [WindowAction: CGFloat] = [:],
+        attractions: [WindowAction: CGPoint] = [:]
     ) -> Presentation? {
         guard isUsable(windowFrame), progress.isFinite else { return nil }
         let amount = min(1, max(0, progress))
         var result: [WindowAction: CGRect] = [:]
-        let targets = magnification.values.contains(where: { $0 > 0 })
-            ? magnifiedFrames(restingFrames: expandedFrames, weights: magnification, windowFrame: windowFrame)
-            : expandedFrames
-        for (action, expanded) in targets {
+        guard let target = magnifiedPresentation(restingFrames: expandedFrames, weights: magnification,
+                windowFrame: windowFrame, attractions: attractions),
+              let nativeCapsule = capsuleFrame(buttonFrames: nativeFrames, padding: 0) else { return nil }
+        for (action, expanded) in target.buttonFrames {
             guard let native = nativeFrames[action], isUsable(native), isUsable(expanded) else { continue }
             result[action] = CGRect(
                 x: native.minX + (expanded.minX - native.minX) * amount,
@@ -135,7 +195,12 @@ struct GlassGroupLayout {
                 height: native.height + (expanded.height - native.height) * amount
             )
         }
-        guard let capsule = capsuleFrame(buttonFrames: result, padding: padding * amount) else { return nil }
+        let capsule = CGRect(
+            x: nativeCapsule.minX + (target.capsuleFrame.minX - nativeCapsule.minX) * amount,
+            y: nativeCapsule.minY + (target.capsuleFrame.minY - nativeCapsule.minY) * amount,
+            width: nativeCapsule.width + (target.capsuleFrame.width - nativeCapsule.width) * amount,
+            height: nativeCapsule.height + (target.capsuleFrame.height - nativeCapsule.height) * amount
+        )
         var offset = CGPoint.zero
 
         // Keep the group inside a normal window without squashing its buttons.
@@ -160,13 +225,19 @@ struct GlassGroupLayout {
     ) -> CGRect? {
         guard isUsable(windowFrame), let resting = capsuleFrame(buttonFrames: expandedFrames) else { return nil }
         let native = capsuleFrame(buttonFrames: nativeFrames) ?? resting
-        let maximum = magnifiedFrames(
+        let maximum = magnifiedPresentation(
             restingFrames: expandedFrames,
             weights: Dictionary(uniqueKeysWithValues: expandedFrames.keys.map { ($0, CGFloat(1)) }),
             windowFrame: windowFrame
         )
-        return resting.union(native).union(capsuleFrame(buttonFrames: maximum) ?? resting)
-            .insetBy(dx: -GlassBubbleOutline.maximumOutset, dy: -GlassBubbleOutline.maximumOutset)
+        return resting.union(native).union(maximum?.capsuleFrame ?? resting)
+            .insetBy(dx: -maximumAttraction * 3, dy: -maximumAttraction * 3)
+    }
+
+    static func clampedAttraction(_ point: CGPoint) -> CGPoint {
+        guard point.x.isFinite, point.y.isFinite else { return .zero }
+        let scale = min(1, maximumAttraction / max(0.0001, hypot(point.x, point.y)))
+        return CGPoint(x: point.x * scale, y: point.y * scale)
     }
 
     private static func isUsable(_ frame: CGRect) -> Bool {
@@ -177,44 +248,38 @@ struct GlassGroupLayout {
     }
 }
 
-/// Frame-rate independent ease-out for a continuously moving proximity target.
+/// Frame-rate independent ease-out between discrete hover states.
 /// Each step stays between the current and target values: no momentum, overshoot
 /// or rebound when the pointer changes direction. Exact settling releases timers.
 struct GlassMagnificationState {
-    static let responseTime: TimeInterval = 0.055
+    static let responseTime: TimeInterval = 0.045
     private static let settlingTolerance: CGFloat = 0.0001
     private(set) var weights: [WindowAction: CGFloat] = [:]
-    private(set) var pointerLocation: CGPoint?
+    private(set) var attractions: [WindowAction: CGPoint] = [:]
     private var targets: [WindowAction: CGFloat] = [:]
-    private var targetPointer: CGPoint?
+    private var targetAttractions: [WindowAction: CGPoint] = [:]
 
     var isAnimating: Bool {
         WindowAction.allCases.contains { (weights[$0] ?? 0) != (targets[$0] ?? 0) }
-            || pointerLocation != targetPointer
+            || WindowAction.allCases.contains { (attractions[$0] ?? .zero) != (targetAttractions[$0] ?? .zero) }
     }
     var isMagnified: Bool { weights.values.contains { $0 > 0 } }
 
     mutating func advance(
         targetWeights: [WindowAction: CGFloat], elapsed: TimeInterval, reduceMotion: Bool,
-        pointer: CGPoint? = nil
+        targetAttractions: [WindowAction: CGPoint] = [:]
     ) {
         targets = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { action in
             let value = targetWeights[action].flatMap { $0.isFinite ? min(1, max(0, $0)) : nil } ?? 0
             return (action, value)
         })
-        if targets.values.contains(where: { $0 > 0 }), let pointer,
-           pointer.x.isFinite, pointer.y.isFinite {
-            targetPointer = pointer
-            if pointerLocation == nil || !isMagnified { pointerLocation = pointer }
-        } else {
-            // Collapse at the last pressure point, rather than chasing a pointer
-            // that has already left the controls. No idle tracking timer remains.
-            targetPointer = pointerLocation
-        }
+        self.targetAttractions = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { action in
+            (action, (targets[action] ?? 0) > 0
+                ? GlassGroupLayout.clampedAttraction(targetAttractions[action] ?? .zero) : .zero)
+        })
         if reduceMotion {
             weights = targets
-            pointerLocation = isMagnified ? targetPointer : nil
-            targetPointer = pointerLocation
+            attractions = self.targetAttractions
             return
         }
         guard elapsed.isFinite, elapsed > 0 else { return }
@@ -224,22 +289,19 @@ struct GlassMagnificationState {
             let current = weights[action] ?? 0
             let next = current + (target - current) * blend
             weights[action] = abs(next - target) < Self.settlingTolerance ? target : next
-        }
-        if !isMagnified {
-            pointerLocation = nil
-            targetPointer = nil
-        } else if let current = pointerLocation, let target = targetPointer {
-            let next = CGPoint(x: current.x + (target.x - current.x) * blend,
-                               y: current.y + (target.y - current.y) * blend)
-            pointerLocation = hypot(next.x - target.x, next.y - target.y) < 0.01 ? target : next
+            let position = attractions[action] ?? .zero
+            let goal = self.targetAttractions[action] ?? .zero
+            let moved = CGPoint(x: position.x + (goal.x - position.x) * blend,
+                                y: position.y + (goal.y - position.y) * blend)
+            attractions[action] = hypot(moved.x - goal.x, moved.y - goal.y) < 0.001 ? goal : moved
         }
     }
 
     mutating func reset() {
         weights.removeAll(keepingCapacity: true)
         targets.removeAll(keepingCapacity: true)
-        pointerLocation = nil
-        targetPointer = nil
+        attractions.removeAll(keepingCapacity: true)
+        targetAttractions.removeAll(keepingCapacity: true)
     }
 }
 

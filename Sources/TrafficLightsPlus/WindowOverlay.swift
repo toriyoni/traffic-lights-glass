@@ -349,7 +349,7 @@ final class WindowOverlay {
         })
         let envelope = GlassGroupLayout.presentationEnvelope(
             nativeFrames: nativeFrames, expandedFrames: preparedCGFrames,
-            windowFrame: windowFrame
+            windowFrame: glassPresentationBounds
         ) ?? capsule
         return Dictionary(uniqueKeysWithValues: preparedActions.map { ($0, envelope) })
     }
@@ -432,15 +432,24 @@ final class WindowOverlay {
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
                 alwaysVisible: !hiddenModeEnabled && !isMinimizeDismissalInProgress
             )
-            let targetWeights = desiredActions.isEmpty ? [:] : GlassGroupLayout.magnificationWeights(
-                buttonFrames: appKitControlFrames(actions: availableActions), pointer: mouseLocation
-            )
             if zoomMenuPanel?.isVisible != true {
+                let hitFrames = glassPanel.isVisible ? glassPanel.presentedButtonFrames
+                    : appKitNativeControlFrames(actions: availableActions)
+                let targetWeights = desiredActions.isEmpty ? [:] : GlassGroupLayout.magnificationWeights(
+                    buttonFrames: hitFrames.filter { availableActions.contains($0.key) }, pointer: mouseLocation
+                )
+                let targetCGFrames = GlassGroupLayout.magnifiedFrames(restingFrames: preparedCGFrames,
+                    weights: targetWeights, windowFrame: glassPresentationBounds)
+                let targetFrames = targetCGFrames.compactMapValues { appKitFrame(for: $0) }
+                let attractions = GlassGroupLayout.magneticOffsets(buttonFrames: targetFrames,
+                    weights: targetWeights, pointer: mouseLocation)
                 glassMagnification.advance(
                     targetWeights: targetWeights,
                     elapsed: presentationTimer == nil ? 0 : elapsed,
                     reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                    pointer: mouseLocation
+                    // Layout uses top-down CG coordinates; the pointer above
+                    // was tested against the actual bottom-up AppKit controls.
+                    targetAttractions: attractions.mapValues { CGPoint(x: $0.x, y: -$0.y) }
                 )
             }
         }
@@ -583,10 +592,11 @@ final class WindowOverlay {
         })
         let presentation = GlassGroupLayout.presentation(
             nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames,
-            progress: progress, windowFrame: windowFrame, magnification: glassMagnification.weights
+            progress: progress, windowFrame: glassPresentationBounds, magnification: glassMagnification.weights,
+            attractions: glassMagnification.attractions
         )
         let envelope = GlassGroupLayout.presentationEnvelope(
-            nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames, windowFrame: windowFrame
+            nativeFrames: nativeCGFrames, expandedFrames: preparedCGFrames, windowFrame: glassPresentationBounds
         )
         var frames: [WindowAction: CGRect] = [:]
         var nativeFrames: [NSRect] = []
@@ -614,7 +624,7 @@ final class WindowOverlay {
         let canInteract = !isNativeZoomClickInFlight
             && !isMinimizeDismissalInProgress && !desiredActions.isEmpty
         let pointerInsideControl = frames.contains { action, frame in
-            desiredActions.contains(action) && frame.contains(mouseLocation)
+            desiredActions.contains(action) && GlassGroupLayout.contains(mouseLocation, in: frame)
         }
         // Keep the whole capsule revealed, while allowing title-bar clicks and
         // drags through its padding, inter-button gaps, and transparent corners.
@@ -624,9 +634,7 @@ final class WindowOverlay {
             nativeButtonFrames: nativeFrames,
             capsuleFrame: capsule,
             progress: progress,
-            containerFrame: container,
-            pointer: glassMagnification.pointerLocation,
-            magnification: glassMagnification.weights.values.max() ?? 0
+            containerFrame: container
         )
         visibleActions = Set(frames.keys)
         interactiveActions = desiredActions.intersection(visibleActions)
@@ -634,14 +642,14 @@ final class WindowOverlay {
         for (action, view) in glassPanel.buttonViews {
             let inside = !glassPanel.ignoresMouseEvents
                 && interactiveActions.contains(action)
-                && frames[action]?.contains(mouseLocation) == true
+                && frames[action].map { GlassGroupLayout.contains(mouseLocation, in: $0) } == true
             view.setPointerInside(inside)
             // Keep the three symbols visible across the padding and gaps too.
             view.isGroupHovered = groupHovered && interactiveActions.contains(action)
         }
         if let hoveredZoomMenuAction,
            (!interactiveActions.contains(hoveredZoomMenuAction)
-               || frames[hoveredZoomMenuAction]?.contains(mouseLocation) != true) {
+               || frames[hoveredZoomMenuAction].map { GlassGroupLayout.contains(mouseLocation, in: $0) } != true) {
             cancelZoomMenuRequest(clearTriggeredState: true)
         }
         lastDesiredActions = desiredActions
@@ -789,6 +797,19 @@ final class WindowOverlay {
             guard let cgFrame = preparedCGFrames[action], let frame = appKitFrame(for: cgFrame) else { return nil }
             return (action, frame)
         })
+    }
+
+    private var glassPresentationBounds: CGRect {
+        // An edge light expands outwards, even a few points past the target
+        // window's edge. Clamp to the display, rather than pushing all three
+        // lights to the right whenever the red light grows.
+        guard let light = WindowAction.allCases.compactMap({ preparedCGFrames[$0] }).first else { return windowFrame }
+        for screen in NSScreen.screens {
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { continue }
+            let bounds = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+            if bounds.contains(CGPoint(x: light.midX, y: light.midY)) { return bounds }
+        }
+        return windowFrame
     }
 
     private func appKitNativeControlFrames(actions: Set<WindowAction>) -> [WindowAction: CGRect] {

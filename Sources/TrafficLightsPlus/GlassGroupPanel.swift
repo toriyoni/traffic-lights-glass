@@ -6,6 +6,7 @@ import AppKit
 final class GlassGroupPanel: NSPanel {
     let buttonViews: [WindowAction: OverlayButtonView]
     private(set) var presentedCapsuleFrame: NSRect?
+    private(set) var presentedButtonFrames: [WindowAction: NSRect] = [:]
 
     private let buttonContentView = NSView(frame: .zero)
     private var materialView: NSView?
@@ -75,24 +76,20 @@ final class GlassGroupPanel: NSPanel {
         nativeButtonFrames: [NSRect],
         capsuleFrame: NSRect,
         progress: CGFloat,
-        containerFrame: NSRect? = nil,
-        pointer: CGPoint? = nil,
-        magnification: CGFloat = 0
+        containerFrame: NSRect? = nil
     ) {
         guard progress.isFinite, progress > 0,
               Self.isValid(capsuleFrame), !buttonFrames.isEmpty else {
             presentedCapsuleFrame = nil
+            presentedButtonFrames = [:]
             orderOut(nil)
             return
         }
 
         let visibleProgress = min(1, max(0, progress))
-        let outline = GlassBubbleOutline(
-            buttonFrames: buttonFrames, capsuleFrame: capsuleFrame,
-            padding: GlassGroupLayout.padding * visibleProgress,
-            pointer: pointer, strength: magnification
-        )
-        let materialFrame = outline.bounds
+        let materialFrame = capsuleFrame
+        let radius = min(capsuleFrame.width, capsuleFrame.height) / 2
+        let outline = CGPath(roundedRect: capsuleFrame, cornerWidth: radius, cornerHeight: radius, transform: nil)
         // AppKit rounds top-level window frames. Resizing that window on every
         // animation frame shifts the visible center by up to a point, even when
         // the requested center is constant. Animate views in a stationary host.
@@ -100,10 +97,11 @@ final class GlassGroupPanel: NSPanel {
         let integralHost = hostFrame.union(materialFrame).integral
         if frame != integralHost { setFrame(integralHost, display: false) }
         presentedCapsuleFrame = materialFrame
+        presentedButtonFrames = buttonFrames
         let localFrame = materialFrame.offsetBy(dx: -frame.minX, dy: -frame.minY)
         materialView?.frame = localFrame
         var localTransform = CGAffineTransform(translationX: -materialFrame.minX, y: -materialFrame.minY)
-        presentedOutlinePath = outline.path.copy(using: &localTransform)!
+        presentedOutlinePath = outline.copy(using: &localTransform)!
         updateMaterialOutline()
         presentedNativeMaskFrames = nativeButtonFrames.filter(Self.isValid).map {
             $0.offsetBy(dx: -materialFrame.minX, dy: -materialFrame.minY)

@@ -9,36 +9,28 @@ private let magnificationNative: [WindowAction: CGRect] = [
     .zoom: CGRect(x: 302.25, y: 192.5, width: 14, height: 14)
 ]
 
-@Test func glassMagnificationUsesDistanceWithASmoothFiniteInfluence() throws {
+@Test func onlyTheLightUnderThePointerHasAMagnificationTarget() throws {
     let frames = GlassGroupLayout.expandedFrames(nativeFrames: magnificationNative, controlSize: 23, windowFrame: magnificationWindow)
-    let center = try #require(frames[.minimize])
-    let pointer = CGPoint(x: center.midX, y: center.midY)
-    let weights = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: pointer)
-    #expect(weights[.minimize] == 1)
-    #expect(try #require(weights[.close]) < 0.3)
-    #expect(abs(try #require(weights[.close]) - #require(weights[.zoom])) < 0.000001)
-
-    let radius = (center.width + GlassGroupLayout.gap) * GlassGroupLayout.influenceRadiusInPitches
-    let halfway = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: pointer.x, y: pointer.y + radius / 2))
-    let edge = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: pointer.x, y: pointer.y + radius))
-    let justInside = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: pointer.x, y: pointer.y + radius - 0.01))
-    #expect(abs(try #require(halfway[.minimize]) - 0.5) < 0.000001)
-    #expect(edge[.minimize] == 0)
-    #expect(try #require(justInside[.minimize]) < 0.000001)
+    for action in WindowAction.allCases {
+        let frame = try #require(frames[action])
+        for dx: CGFloat in [-9, 0, 9] {
+            let target = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: frame.midX + dx, y: frame.midY))
+            #expect(target[action] == 1)
+            #expect(target.filter { $0.value > 0 }.count == 1)
+        }
+        // Rectangular corners are not part of the circular button.
+        let corner = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: frame.origin)
+        #expect(corner.values.allSatisfy { $0 == 0 })
+    }
     #expect(GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: CGFloat.nan, y: 0)).isEmpty)
 }
 
-@Test func movingBetweenLightsDoesNotSwitchSizesAbruptly() throws {
+@Test func movingThroughGapsHasDistinctUnmagnifiedIntervals() throws {
     let frames = GlassGroupLayout.expandedFrames(nativeFrames: magnificationNative, controlSize: 28, windowFrame: magnificationWindow)
-    let close = try #require(frames[.close])
-    let green = try #require(frames[.zoom])
-    var previous = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: close.midX - 60, y: close.midY))
-    for x in stride(from: close.midX - 60, through: green.midX + 60, by: 0.25) {
-        let current = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: x, y: close.midY))
-        for action in WindowAction.allCases {
-            #expect(abs((current[action] ?? 0) - (previous[action] ?? 0)) < 0.01)
-        }
-        previous = current
+    let close = try #require(frames[.close]), middle = try #require(frames[.minimize]), green = try #require(frames[.zoom])
+    for x in [close.minX - 2, (close.maxX + middle.minX) / 2, (middle.maxX + green.minX) / 2, green.maxX + 2] {
+        let target = GlassGroupLayout.magnificationWeights(buttonFrames: frames, pointer: CGPoint(x: x, y: close.midY))
+        #expect(target.values.allSatisfy { $0 == 0 })
     }
 }
 
@@ -72,7 +64,7 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
     let frames = GlassGroupLayout.magnifiedFrames(restingFrames: resting, weights: [.close: .nan, .zoom: 50], windowFrame: magnificationWindow)
     #expect(frames[.minimize] == nil)
     #expect(frames[.close]?.width == 28)
-    #expect(frames[.zoom]?.width == 28 * GlassGroupLayout.maximumMagnification)
+    #expect(abs(try #require(frames[.zoom]).width - 28 * GlassGroupLayout.maximumMagnification) < 0.000001)
     #expect(GlassGroupLayout.magnifiedFrames(restingFrames: [:], weights: [:], windowFrame: magnificationWindow).isEmpty)
 }
 
@@ -141,10 +133,8 @@ func magnifiedButtonsKeepTheirGapsAndStayInsideAStationaryEnvelope(size: CGFloat
     for focused in WindowAction.allCases {
         for weight: CGFloat in [0, 0.1, 0.5, 0.9, 1, 0.8, 0.4, 0.1, 0] {
             let p = try #require(GlassGroupLayout.presentation(nativeFrames: magnificationNative, expandedFrames: resting, progress: 1, windowFrame: magnificationWindow, magnification: [focused: weight]))
-            let focusedFrame = try #require(resting[focused])
             panel.present(buttonFrames: p.buttonFrames, nativeButtonFrames: [], capsuleFrame: p.capsuleFrame,
-                progress: 1, containerFrame: host,
-                pointer: CGPoint(x: focusedFrame.midX, y: focusedFrame.midY + 6), magnification: weight)
+                progress: 1, containerFrame: host)
             panel.contentView?.layoutSubtreeIfNeeded()
             if let fixedFrame { #expect(panel.frame == fixedFrame) }
             fixedFrame = panel.frame
