@@ -1,0 +1,6 @@
+PASS red/yellow dwell never opens the window menu
+PASS leaving green before the hover delay cancels the pending menu
+PASS delayed callback rechecks the live pointer, without another hover event
+PASS green-to-menu route stays open and clickable with a fixed anchor
+PASS moving to yellow closes synchronously; yellow magnification stays responsive
+PASS menu reopens after a fresh green dwell and closes immediately outside

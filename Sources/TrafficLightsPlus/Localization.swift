@@ -32,6 +32,8 @@ enum AppString: String, CaseIterable {
     case appearance = "appearance.title"
     case appearanceLiquidGlass = "appearance.liquid_glass"
     case liquidGlassHelp = "appearance.liquid_glass.help"
+    case followSystemGlassTransparency = "appearance.liquid_glass.follow_system_transparency"
+    case followSystemGlassTransparencyHelp = "appearance.liquid_glass.follow_system_transparency.help"
     case glassGroupRevealHelp = "hidden_traffic_lights.glass_group.help"
     case appearanceMacOS = "appearance.macos"
     case appearanceEdgeSquares = "appearance.edge_squares"

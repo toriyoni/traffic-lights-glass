@@ -6,7 +6,9 @@
 "overlay.enabled" = "放大红绿灯";
 "preview.title" = "实时预览";
 "appearance.liquid_glass" = "液态玻璃";
-"appearance.liquid_glass.help" = "按钮随指针距离分别放大，相邻按钮平滑让位。玻璃胶囊像气泡一样在指针附近撑开，保持完整、圆滑的外沿。macOS 26 及以上使用系统液态玻璃，较早版本使用磨砂背景。";
+"appearance.liquid_glass.help" = "只放大当前悬停的灯，并轻微向指针吸附；玻璃胶囊平滑伸展，保留圆滑外沿和局部反光。macOS 26 及以上使用系统液态玻璃，较早版本使用磨砂背景。";
+"appearance.liquid_glass.follow_system_transparency" = "透明度跟随系统";
+"appearance.liquid_glass.follow_system_transparency.help" = "开启时，跟随“系统设置 → 外观 → Liquid Glass”；关闭时，本应用固定使用清透效果。系统的“降低透明度”仍然有效。";
 "hidden_traffic_lights.glass_group.help" = "靠近红绿灯时整组出现，离哪个按钮越近，哪个就越大；移开后平滑缩小并收起。";
 "appearance.title" = "外观";
 "appearance.macos" = "macOS 圆形";

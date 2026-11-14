@@ -2,7 +2,7 @@
 
 > **本源码包含 Liquid Glass 整组展开修改。** 构建入口与当前验证状态见
 > [BUILD-LIQUID-GLASS.md](BUILD-LIQUID-GLASS.md)。原生玻璃需 Xcode 26 / macOS 26 SDK；
-> 此修改尚未在 macOS 上编译或实测。下方截图与发布链接属于原版项目。
+> 此修改已在本机 macOS 27.2.1 构建并验证。下方发布链接及早期界面截图属于原版项目。
 
 [![Upstream CI](https://github.com/Liu223344/traffic-light-plus/actions/workflows/ci.yml/badge.svg)](https://github.com/Liu223344/traffic-light-plus/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Liu223344/traffic-light-plus)](https://github.com/Liu223344/traffic-light-plus/releases/latest)
@@ -70,9 +70,10 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 
 - 红绿灯尺寸可在 `18-48 pt` 范围内调整。
 - 液态玻璃模式只放大当前悬停的灯，并轻微向指针吸附；三个灯之间可连续滑动和点击，胶囊两端与红绿灯同心，其他灯保持稳定。胶囊和灯面带有随指针移动的柔光与局部边缘反光，菜单与灯的交互独立。见[交互效果](docs/pointer-light-and-interaction.md)。
+- 液态玻璃提供“透明度跟随系统”开关：默认跟随系统外观中的 Liquid Glass，关闭后固定为清透效果。见[透明度与菜单验证](docs/system-glass-transparency.md)。
 - 圆形按钮支持自定义间距，也可切换为左上角贴边方块。
 - “隐藏式红绿灯”支持靠近时放大“整组”或仅放大“单个”最近按钮。
-- 在当前活跃窗口中悬停配置为“缩放窗口”的放大按钮，可打开固定在按钮旁的玻璃菜单，调用系统平铺、排列及全屏操作。见[菜单定位与验证](docs/anchored-window-menu.md)。
+- 在当前活跃窗口中悬停配置为“缩放窗口”的绿灯，可打开固定在绿灯旁的玻璃菜单；移入菜单可操作，移到其他灯或外部立即关闭，调用系统平铺、排列及全屏操作。见[菜单定位与验证](docs/anchored-window-menu.md)。
 - 窗口位置通过系统通知更新；隐藏式红绿灯由鼠标接近触发，仅在展开、收起期间刷新动画，避免持续高频追踪。
 - 最小化前快速缩小并隐藏覆盖按钮，避免覆盖层留在系统动画中。
 - 再次点击当前前台应用的 Dock 图标时，可最小化该应用的当前窗口。
@@ -220,7 +221,8 @@ Public builds currently use ad-hoc code signing and are not notarized by Apple. 
 - Adjustable traffic-light control size from `18-48 pt`.
 - Custom spacing for circular controls, with an optional left-edge square style.
 - Hidden traffic lights can reveal the entire group or only the nearest individual control.
-- Hover over an enlarged control configured to zoom the active window to open the native macOS zoom and tiling menu.
+- Hover over the green button configured to zoom the active window to open its anchored glass menu. Moving into the menu keeps it clickable; moving to another light or outside closes it immediately.
+- Follow System Glass Transparency defaults to on. Turning it off keeps this app clear independently of the system Liquid Glass setting. See [validation and compatibility details](docs/system-glass-transparency.md).
 - Window positions update through system notifications. Hidden traffic lights react to pointer proximity and refresh animations only while expanding or collapsing, without continuous high-frequency tracking.
 - Overlay controls quickly shrink and disappear before minimization to avoid remaining visible during the system animation.
 - Click the current frontmost application's Dock icon again to minimize its active window.

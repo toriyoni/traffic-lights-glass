@@ -40,6 +40,23 @@ struct ZoomMenuPlacement {
         var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: frame.height)
         return path.copy(using: &flip)!
     }
+
+    func containsInteraction(_ point: CGPoint, source: CGRect, sourceIsCircular: Bool = true) -> Bool {
+        if sourceIsCircular ? GlassGroupLayout.contains(point, in: source) : source.contains(point) { return true }
+        if path.contains(CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)) { return true }
+        // Retain only the direct route from the green light into the menu.
+        // A rectangle spanning both windows also included other lights and
+        // large empty areas, making the menu linger after the pointer left.
+        let edgeY = belowAnchor ? frame.maxY - Self.arrowHeight : frame.minY + Self.arrowHeight
+        let corridor = CGMutablePath()
+        corridor.move(to: CGPoint(x: source.midX, y: source.midY))
+        // Connect to the arrow's base, not the entire menu width. At the right
+        // screen edge a wide fan could otherwise cover the yellow/red lights.
+        corridor.addLine(to: CGPoint(x: frame.minX + arrowX - 10, y: edgeY))
+        corridor.addLine(to: CGPoint(x: frame.minX + arrowX + 10, y: edgeY))
+        corridor.closeSubpath()
+        return corridor.contains(point)
+    }
 }
 
 /// A fixed, nonactivating menu. Its arrow is captured once from the visible
@@ -48,6 +65,8 @@ final class ZoomMenuPanel: NSPanel {
     static let shadowInset: CGFloat = 32
     var onCommand: ((WindowMenuCommand) -> Void)?
     var onDismiss: (() -> Void)?
+    var sourceFrameProvider: (() -> CGRect?)?
+    var sourceIsCircular = true
     let anchorFrame: CGRect
     let placement: ZoomMenuPlacement
     private let snapshot: WindowMenuSnapshot
@@ -55,7 +74,6 @@ final class ZoomMenuPanel: NSPanel {
     private var firstRow: [WindowLayoutButton] = []
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var dismissal: DispatchWorkItem?
 
     init(anchor: CGRect, visibleScreen: CGRect, snapshot: WindowMenuSnapshot, language: AppLanguage, appearance: NSAppearance?) {
         anchorFrame = anchor
@@ -121,7 +139,6 @@ final class ZoomMenuPanel: NSPanel {
     @objc(_hasActiveAppearance) private func glassHasActiveAppearance() -> Bool { true }
 
     deinit {
-        dismissal?.cancel()
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
     }
@@ -139,8 +156,6 @@ final class ZoomMenuPanel: NSPanel {
     }
 
     func dismiss() {
-        dismissal?.cancel()
-        dismissal = nil
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor); self.globalMonitor = nil }
         if let localMonitor { NSEvent.removeMonitor(localMonitor); self.localMonitor = nil }
         let wasVisible = isVisible
@@ -154,15 +169,7 @@ final class ZoomMenuPanel: NSPanel {
         case .flagsChanged:
             updateOptionKey(event.modifierFlags.contains(.option))
         case .mouseMoved:
-            updateMousePassThrough()
-            let region = placement.frame.union(anchorFrame).insetBy(dx: -8, dy: -8)
-            if region.contains(NSEvent.mouseLocation) {
-                dismissal?.cancel(); dismissal = nil
-            } else if dismissal == nil {
-                let item = DispatchWorkItem { [weak self] in self?.dismiss() }
-                dismissal = item
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
-            }
+            updatePointerLocation(NSEvent.mouseLocation)
         case .keyDown:
             dismiss()
         case .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel:
@@ -175,6 +182,13 @@ final class ZoomMenuPanel: NSPanel {
         // The window reserves clear space for the native shadow. That space
         // must not intercept clicks on the green button underneath it.
         ignoresMouseEvents = !receivesMouse(at: NSEvent.mouseLocation)
+    }
+
+    func updatePointerLocation(_ point: CGPoint) {
+        guard isVisible else { return }
+        ignoresMouseEvents = !receivesMouse(at: point)
+        let source = sourceFrameProvider?() ?? anchorFrame
+        if !placement.containsInteraction(point, source: source, sourceIsCircular: sourceIsCircular) { dismiss() }
     }
 
     func receivesMouse(at screenPoint: CGPoint) -> Bool {

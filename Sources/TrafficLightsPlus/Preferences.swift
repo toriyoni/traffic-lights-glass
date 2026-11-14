@@ -41,6 +41,7 @@ final class Preferences: ObservableObject {
         static let size = "controlSize"
         static let spacing = "controlSpacingAdjustment"
         static let style = "controlStyle"
+        static let followSystemGlassTransparency = "followSystemGlassTransparency"
         static let hiddenTrafficLightsEnabled = "hiddenTrafficLightsEnabled"
         static let hiddenTrafficLightRevealMode = "hiddenTrafficLightRevealMode"
         static let showInFullScreen = "showInFullScreen"
@@ -78,6 +79,10 @@ final class Preferences: ObservableObject {
 
     @Published var style: ControlStyle {
         didSet { defaults.set(style.rawValue, forKey: Key.style) }
+    }
+
+    @Published var followSystemGlassTransparency: Bool {
+        didSet { defaults.set(followSystemGlassTransparency, forKey: Key.followSystemGlassTransparency) }
     }
 
     @Published var hiddenTrafficLightsEnabled: Bool {
@@ -134,6 +139,7 @@ final class Preferences: ObservableObject {
             Key.size: ControlLayout.defaultSize,
             Key.spacing: ControlLayout.defaultSpacingAdjustment,
             Key.style: ControlStyle.liquidGlass.rawValue,
+            Key.followSystemGlassTransparency: true,
             Key.hiddenTrafficLightsEnabled: true,
             Key.hiddenTrafficLightRevealMode: HiddenTrafficLightRevealMode.group.rawValue,
             Key.showInFullScreen: false,
@@ -153,6 +159,7 @@ final class Preferences: ObservableObject {
         size = Double(ControlLayout.effectiveSize(preferred: defaults.double(forKey: Key.size)))
         spacing = Double(ControlLayout.effectiveSpacingAdjustment(preferred: defaults.double(forKey: Key.spacing)))
         style = ControlStyle(rawValue: defaults.string(forKey: Key.style) ?? "") ?? .liquidGlass
+        followSystemGlassTransparency = defaults.bool(forKey: Key.followSystemGlassTransparency)
         hiddenTrafficLightsEnabled = defaults.bool(forKey: Key.hiddenTrafficLightsEnabled)
         hiddenTrafficLightRevealMode = HiddenTrafficLightRevealMode(
             rawValue: defaults.string(forKey: Key.hiddenTrafficLightRevealMode) ?? ""

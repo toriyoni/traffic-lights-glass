@@ -117,12 +117,14 @@ final class WindowOverlay {
     private var lastDesiredActions = Set<WindowAction>()
     private var lastPresentationUpdate = 0.0
     private var presentationTimer: Timer?
+    private let pointerLocation: () -> NSPoint
     private var pointerActivationRegion: CGRect?
     private var pointerActivationRegionIsValid = false
     private(set) var presentationState = OverlayPresentationState.hidden
 
-    init(key: AXWindowKey) {
+    init(key: AXWindowKey, pointerLocation: @escaping () -> NSPoint = { NSEvent.mouseLocation }) {
         self.key = key
+        self.pointerLocation = pointerLocation
         bundleIdentifier = NSRunningApplication(processIdentifier: key.pid)?.bundleIdentifier
         window = key.element
         panels = Dictionary(uniqueKeysWithValues: WindowAction.allCases.map { ($0, OverlayPanel(action: $0)) })
@@ -171,7 +173,7 @@ final class WindowOverlay {
             guard let self else { return }
             self.updatePresentation(
                 availableActions: self.availableActions,
-                mouseLocation: NSEvent.mouseLocation,
+                mouseLocation: self.pointerLocation(),
                 hiddenModeEnabled: self.hiddenModeEnabled,
                 revealMode: self.revealMode
             )
@@ -660,10 +662,14 @@ final class WindowOverlay {
             // Keep the three symbols visible across the padding and gaps too.
             view.isGroupHovered = groupHovered && interactiveActions.contains(action)
         }
-        if let hoveredZoomMenuAction,
-           (!interactiveActions.contains(hoveredZoomMenuAction)
-               || hoveredAction != hoveredZoomMenuAction) {
-            cancelZoomMenuRequest(clearTriggeredState: true)
+        if zoomMenuPanel?.isVisible != true {
+            let onGreen = canInteract && interactiveActions.contains(.zoom)
+                && frames[.zoom].map { GlassGroupLayout.contains(mouseLocation, in: $0) } == true
+            if onGreen {
+                if hoveredZoomMenuAction != .zoom { scheduleZoomMenu(for: .zoom) }
+            } else if hoveredZoomMenuAction != nil {
+                cancelZoomMenuRequest(clearTriggeredState: true)
+            }
         }
         lastDesiredActions = desiredActions
     }
@@ -984,7 +990,8 @@ final class WindowOverlay {
         if zoomMenuPanel?.isVisible == true { return }
         // A glass group includes its gaps. Its renderer owns the group hover
         // state; the classic delayed reset would incorrectly clear it there.
-        if controlStyle != .liquidGlass { setGroupHovered(hovered) }
+        guard controlStyle != .liquidGlass else { return }
+        setGroupHovered(hovered)
         if hovered {
             scheduleZoomMenu(for: action)
         } else if hoveredZoomMenuAction == action {
@@ -1002,8 +1009,11 @@ final class WindowOverlay {
     }
 
     private func scheduleZoomMenu(for action: WindowAction) {
-        guard zoomMenuPanel?.isVisible != true else { return }
+        guard action == .zoom, zoomMenuPanel?.isVisible != true else { return }
         cancelZoomMenuRequest(clearTriggeredState: true)
+        // Remember this dwell even when the app cannot offer a menu. Otherwise
+        // the glass animation would query AX capabilities again on every frame.
+        hoveredZoomMenuAction = action
         guard !isNativeZoomClickInFlight,
               !isWithinNativeZoomMenuSuppression(),
               interactiveActions.contains(action),
@@ -1018,13 +1028,18 @@ final class WindowOverlay {
             supportsShowMenu: supportsShowMenu
         ) else { return }
 
-        hoveredZoomMenuAction = action
+        let scheduledGeneration = zoomMenuRequestGeneration
         let workItem = DispatchWorkItem { [weak self] in
             guard let self,
-                  self.hoveredZoomMenuAction == action,
+                  self.zoomMenuRequestGeneration == scheduledGeneration,
+                  self.hoveredZoomMenuAction == action else { return }
+            guard self.pointerIsOnGreenLight(),
                   self.interactiveActions.contains(action),
                   let view = self.buttonView(for: action),
-                  let zoomButton = self.currentButton(for: .zoom) else { return }
+                  let zoomButton = self.currentButton(for: .zoom) else {
+                self.cancelZoomMenuRequest(clearTriggeredState: true)
+                return
+            }
 
             let supportsShowMenu = self.supportsAccessibilityAction(
                 kAXShowMenuAction as CFString,
@@ -1048,9 +1063,13 @@ final class WindowOverlay {
                 let snapshot = WindowMenuAccess.snapshot(pid: pid, window: targetWindow)
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.zoomMenuRequestGeneration == generation,
-                          self.hoveredZoomMenuAction == action,
+                          self.hoveredZoomMenuAction == action else { return }
+                    guard self.pointerIsOnGreenLight(),
                           self.isEligibleForDisplay, !self.isSuppressed, self.targetWindowIsActive(),
-                          let view = self.buttonView(for: action), let host = view.window else { return }
+                          let view = self.buttonView(for: action), let host = view.window else {
+                        self.cancelZoomMenuRequest(clearTriggeredState: true)
+                        return
+                    }
                     let anchor = host.convertToScreen(view.convert(view.bounds, to: nil))
                     self.presentZoomMenu(snapshot: snapshot, anchor: anchor, language: view.language, appearance: view.effectiveAppearance)
                 }
@@ -1068,6 +1087,18 @@ final class WindowOverlay {
         if clearTriggeredState { zoomMenuTriggeredAt = nil }
     }
 
+    private func greenLightScreenFrame() -> CGRect? {
+        guard let view = buttonView(for: .zoom), !view.isHidden,
+              let host = view.window, host.isVisible else { return nil }
+        return host.convertToScreen(view.convert(view.bounds, to: nil))
+    }
+
+    private func pointerIsOnGreenLight() -> Bool {
+        guard let frame = greenLightScreenFrame() else { return false }
+        return controlStyle == .edgeSquares ? frame.contains(pointerLocation())
+            : GlassGroupLayout.contains(pointerLocation(), in: frame)
+    }
+
     private func presentZoomMenu(snapshot: WindowMenuSnapshot, anchor: CGRect, language: AppLanguage, appearance: NSAppearance) {
         guard !snapshot.enabled.isEmpty,
               let screen = NSScreen.screens.max(by: {
@@ -1080,12 +1111,14 @@ final class WindowOverlay {
         zoomMenuWasRequested = false
         zoomMenuTriggeredAt = nil
         let menu = ZoomMenuPanel(anchor: anchor, visibleScreen: screen.visibleFrame, snapshot: snapshot, language: language, appearance: appearance)
+        menu.sourceFrameProvider = { [weak self] in self?.greenLightScreenFrame() }
+        menu.sourceIsCircular = controlStyle != .edgeSquares
         menu.onDismiss = { [weak self, weak menu] in
             guard let self, self.zoomMenuPanel === menu else { return }
             self.zoomMenuPanel = nil
             self.customZoomMenuDismissedAt = ProcessInfo.processInfo.systemUptime
             self.lastPresentationUpdate = 0
-            self.updatePresentation(availableActions: self.availableActions, mouseLocation: NSEvent.mouseLocation,
+            self.updatePresentation(availableActions: self.availableActions, mouseLocation: self.pointerLocation(),
                 hiddenModeEnabled: self.hiddenModeEnabled, revealMode: self.revealMode)
         }
         menu.onCommand = { [weak self] command in
@@ -1375,7 +1408,7 @@ final class WindowOverlay {
             // including on failure, rather than waiting for the next scan.
             updatePresentation(
                 availableActions: availableActions,
-                mouseLocation: NSEvent.mouseLocation,
+                mouseLocation: pointerLocation(),
                 hiddenModeEnabled: hiddenModeEnabled,
                 revealMode: revealMode
             )

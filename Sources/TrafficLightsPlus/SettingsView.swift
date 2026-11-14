@@ -190,6 +190,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if #available(macOS 26.1, *) {
+                        Toggle(localized(.followSystemGlassTransparency), isOn: $preferences.followSystemGlassTransparency)
+                            .toggleStyle(.switch)
+                        Text(localized(.followSystemGlassTransparencyHelp))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 

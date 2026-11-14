@@ -24,6 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         logger.notice("Application finished launching")
         NSApp.setActivationPolicy(.accessory)
+        GlassTransparency.apply(followsSystem: preferences.followSystemGlassTransparency)
+        preferences.$followSystemGlassTransparency
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { GlassTransparency.apply(followsSystem: $0) }
+            .store(in: &subscriptions)
         updateController.start()
         tracker = WindowTracker(preferences: preferences)
         dockClickController = DockClickController(

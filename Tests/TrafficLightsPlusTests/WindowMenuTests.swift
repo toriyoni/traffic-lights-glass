@@ -30,6 +30,56 @@ import Testing
     }
 }
 
+@Test func menuRetentionExcludesOtherLightsAndEmptySpace() {
+    let screen = CGRect(x: 0, y: 0, width: 1512, height: 949)
+    for y: CGFloat in [650, 20] {
+        let green = CGRect(x: 500, y: y, width: 33, height: 33)
+        let p = ZoomMenuPlacement(anchor: green, visibleScreen: screen)
+        #expect(p.containsInteraction(CGPoint(x: green.midX, y: green.midY), source: green))
+        #expect(p.containsInteraction(CGPoint(x: p.frame.midX, y: p.frame.midY), source: green))
+        let crossingY = p.belowAnchor ? green.minY - 1 : green.maxY + 1
+        #expect(p.containsInteraction(CGPoint(x: green.midX, y: crossingY), source: green))
+        #expect(!p.containsInteraction(CGPoint(x: green.midX - 31, y: green.midY), source: green))
+        #expect(!p.containsInteraction(CGPoint(x: green.midX - 62, y: green.midY), source: green))
+        #expect(!p.containsInteraction(CGPoint(x: green.maxX + 5, y: green.midY), source: green))
+        #expect(!p.containsInteraction(CGPoint(x: p.frame.minX + 1, y: crossingY), source: green))
+    }
+    // A clamped menu must not turn the red/yellow controls into a retention
+    // corridor when its body extends to the left of the green light.
+    let green = CGRect(x: screen.maxX - 40, y: 650, width: 33, height: 33)
+    let placement = ZoomMenuPlacement(anchor: green, visibleScreen: screen)
+    let corner = CGPoint(x: green.minX + 1, y: green.maxY - 1)
+    #expect(!placement.containsInteraction(corner, source: green))
+    #expect(placement.containsInteraction(corner, source: green, sourceIsCircular: false))
+    for offset: CGFloat in [-31, -62] {
+        for dy: CGFloat in [-10, 0, 10] {
+            #expect(!placement.containsInteraction(CGPoint(x: green.midX + offset, y: green.midY + dy), source: green))
+        }
+    }
+}
+
+@MainActor
+@Test func menuClosesImmediatelyOutsideItsLiveSourceAndMenu() {
+    var green = CGRect(x: 500, y: 650, width: 33, height: 33)
+    let menu = ZoomMenuPanel(anchor: green, visibleScreen: CGRect(x: 0, y: 0, width: 1512, height: 949),
+        snapshot: WindowMenuSnapshot(enabled: [.fill], isFullScreen: false), language: .english, appearance: nil)
+    menu.sourceFrameProvider = { green }
+    var dismissals = 0
+    menu.onDismiss = { dismissals += 1 }
+    defer { menu.dismiss() }
+    menu.present()
+    menu.updatePointerLocation(CGPoint(x: green.midX, y: green.midY))
+    menu.updatePointerLocation(CGPoint(x: green.midX, y: green.minY - 1))
+    menu.updatePointerLocation(CGPoint(x: menu.placement.frame.midX, y: menu.placement.frame.midY))
+    #expect(menu.isVisible && dismissals == 0)
+    green = green.insetBy(dx: 5, dy: 5)
+    menu.updatePointerLocation(CGPoint(x: green.midX, y: green.maxY + 2))
+    #expect(!menu.isVisible && dismissals == 1)
+    menu.present()
+    menu.updatePointerLocation(CGPoint(x: green.midX - 31, y: green.midY))
+    #expect(!menu.isVisible && dismissals == 2)
+}
+
 @Test func fallbackWindowLayoutsUseVisibleScreenCoordinatesWithoutMovingOtherWindows() throws {
     let screen = CGRect(x: -1440, y: 33, width: 1440, height: 867)
     let left = try #require(WindowMenuCommand.left.frame(in: screen))

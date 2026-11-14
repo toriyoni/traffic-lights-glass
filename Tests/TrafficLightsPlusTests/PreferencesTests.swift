@@ -18,6 +18,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.size == 28)
         #expect(preferences.spacing == 0)
         #expect(preferences.style == .liquidGlass)
+        #expect(preferences.followSystemGlassTransparency)
         #expect(preferences.hiddenTrafficLightsEnabled)
         #expect(preferences.hiddenTrafficLightRevealMode == .group)
         #expect(!preferences.showInFullScreen)
@@ -28,6 +29,61 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(preferences.minimizeBehavior == .minimizeWindow)
         #expect(preferences.zoomBehavior == .zoomWindow)
         #expect(preferences.quitOnCloseApplications.isEmpty)
+    }
+}
+
+@Test func systemGlassTransparencyChoicePersistsAcrossLaunches() {
+    withDefaults { defaults in
+        let preferences = Preferences(defaults: defaults)
+        preferences.followSystemGlassTransparency = false
+        #expect(!Preferences(defaults: defaults).followSystemGlassTransparency)
+        preferences.followSystemGlassTransparency = true
+        #expect(Preferences(defaults: defaults).followSystemGlassTransparency)
+    }
+}
+
+@Test func fixedGlassOverridesOnlyItsApplicationAndFollowingReleasesTheOverride() {
+    withDefaults { defaults in
+        let center = NotificationCenter()
+        // Simulate an inherited system value, including a future change. An
+        // opt-in must remove the override, not copy and freeze today's value.
+        let inheritedName = "TrafficLightsPlusTests.Inherited.\(UUID().uuidString)"
+        let inherited = UserDefaults(suiteName: inheritedName)!
+        inherited.set(0.75, forKey: GlassTransparency.tintAmountKey)
+        inherited.set(true, forKey: GlassTransparency.legacyDiffusionKey)
+        defaults.addSuite(named: inheritedName)
+        defer {
+            defaults.removeSuite(named: inheritedName)
+            inherited.removePersistentDomain(forName: inheritedName)
+        }
+        defaults.set("keep", forKey: "unrelatedPreference")
+        let globalBefore = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
+        GlassTransparency.apply(followsSystem: false, defaults: defaults, notificationCenter: center)
+        #expect(defaults.double(forKey: GlassTransparency.tintAmountKey) == 0)
+        #expect(!defaults.bool(forKey: GlassTransparency.legacyDiffusionKey))
+        GlassTransparency.apply(followsSystem: true, defaults: defaults, notificationCenter: center)
+        #expect(defaults.double(forKey: GlassTransparency.tintAmountKey) == 0.75)
+        #expect(defaults.bool(forKey: GlassTransparency.legacyDiffusionKey))
+        inherited.set(0.35, forKey: GlassTransparency.tintAmountKey)
+        #expect(defaults.double(forKey: GlassTransparency.tintAmountKey) == 0.35)
+        #expect(defaults.string(forKey: "unrelatedPreference") == "keep")
+        let globalAfter = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
+        for key in [GlassTransparency.tintAmountKey, GlassTransparency.legacyDiffusionKey] {
+            #expect((globalBefore?[key] as? NSNumber) == (globalAfter?[key] as? NSNumber))
+        }
+    }
+}
+
+@Test func glassRefreshIsLocalAndArrivesAfterTheNewPreference() {
+    withDefaults { defaults in
+        let center = NotificationCenter()
+        let token = center.addObserver(forName: GlassTransparency.materialDidChange, object: nil, queue: nil) { _ in
+            #expect(defaults.double(forKey: GlassTransparency.tintAmountKey) == 0)
+            defaults.set(true, forKey: "testObservedRefresh")
+        }
+        defer { center.removeObserver(token) }
+        GlassTransparency.apply(followsSystem: false, defaults: defaults, notificationCenter: center)
+        #expect(defaults.bool(forKey: "testObservedRefresh"))
     }
 }
 

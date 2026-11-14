@@ -1,0 +1,12 @@
+Verified 2026-11-14 on macOS 27.2.1, Apple Silicon; SDK macOS 26.5.
+142 Swift tests passed, including inherited/default preference behavior, local
+material invalidation, immediate menu dismissal, and screen-edge retention.
+Release build and codesign --verify --deep --strict passed.
+Installed binary SHA256: 02ad4fe2acbcf7175c32db13a75ff9be7d74560e7977201f8bfbbcdedfa03cb6
+Installed UI switch observed on -> off -> on. Off created only application-local
+NSGlassTintAmount=0 and NSGlassDiffusionSetting=false. On removed both overrides.
+The user's system NSGlassTintAmount was restored to 0. The UU Remote disabled
+rule and all previous preferences were preserved; the new follow preference is on.
+Native menu fixture results are in menu-behavior.txt. Material A/B screenshots
+are alongside this report. These checks do not replace all third-party-app,
+multi-display, or other macOS version testing.
