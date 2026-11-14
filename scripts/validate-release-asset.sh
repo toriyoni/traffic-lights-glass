@@ -13,22 +13,14 @@ EXPECTED_BUILD="$4"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-case "$ARCH" in
-    arm64)
-        EXPECTED_FEED="https://liu223344.github.io/traffic-light-plus/appcast-arm64.xml"
-        ;;
-    x86_64)
-        EXPECTED_FEED="https://liu223344.github.io/traffic-light-plus/appcast-x86_64.xml"
-        ;;
-    *)
-        echo "Unsupported architecture: $ARCH" >&2
-        exit 64
-        ;;
-esac
+ROOT="${0:A:h:h}"
+source "$ROOT/scripts/release-config.sh"
+case "$ARCH" in arm64|x86_64) ;; *) exit 64 ;; esac
+EXPECTED_FEED="$(release_feed_url "$ARCH")"
 
 ditto -x -k "$ZIP" "$TMP"
-APP=$(find "$TMP" -maxdepth 2 -type d -name '*.app' -print -quit)
-if [[ -z "$APP" ]]; then
+APP="$TMP/$RELEASE_APP_NAME.app"
+if [[ ! -d "$APP" ]]; then
     echo "No application bundle found in $ZIP" >&2
     exit 1
 fi
@@ -41,7 +33,10 @@ FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
 [[ "$(plutil -extract CFBundleVersion raw "$INFO")" == "$EXPECTED_BUILD" ]]
 [[ "$(plutil -extract LSMinimumSystemVersion raw "$INFO")" == "13.0" ]]
 [[ "$(plutil -extract SUFeedURL raw "$INFO")" == "$EXPECTED_FEED" ]]
-[[ -n "$(plutil -extract SUPublicEDKey raw "$INFO")" ]]
+[[ "$(plutil -extract CFBundleIdentifier raw "$INFO")" == "$RELEASE_BUNDLE_ID" ]]
+[[ "$(plutil -extract SUPublicEDKey raw "$INFO")" == "$(plutil -extract SUPublicEDKey raw "$ROOT/Info.plist")" ]]
+[[ "$(plutil -extract SURequireSignedFeed raw "$INFO")" == "true" ]]
+[[ "$(plutil -extract SUVerifyUpdateBeforeExtraction raw "$INFO")" == "true" ]]
 [[ -d "$FRAMEWORK" ]]
 
 lipo "$BINARY" -verify_arch "$ARCH"

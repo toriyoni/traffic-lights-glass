@@ -1,8 +1,8 @@
-"settings.window.title" = "Traffic Lights+ Settings";
+"settings.window.title" = "Traffic Lights Glass Settings";
 "settings.subtitle" = "Larger, easier-to-use window controls";
 "language.label" = "语言 / Language";
 "menu_bar_icon.visible" = "Show Menu Bar Icon";
-"menu_bar_icon.visible.help" = "Reopen Traffic Lights+ to access Settings after hiding the icon";
+"menu_bar_icon.visible.help" = "Reopen Traffic Lights Glass to access Settings after hiding the icon";
 "overlay.enabled" = "Enlarged Traffic Lights";
 "preview.title" = "Live Preview";
 "appearance.liquid_glass" = "Liquid Glass";
@@ -60,7 +60,7 @@
 "accessibility.granted" = "Accessibility Permission Granted";
 "accessibility.required" = "Accessibility permission is required to control windows";
 "accessibility.open_settings" = "Open Accessibility Settings";
-"accessibility.instructions" = "If this app is missing from the list, click “+” and select Traffic Lights Plus.app.";
+"accessibility.instructions" = "If this app is missing from the list, click “+” and select Traffic Lights Glass.app.";
 "application_list.picker.title" = "Choose an Application to Configure";
 "quit_on_close.picker.prompt" = "Add";
 "quit_on_close.error.title" = "Unable to Add Application";
@@ -69,7 +69,7 @@
 "menu.settings" = "Settings…";
 "menu.enable_overlays" = "Enable Enlarged Traffic Lights";
 "menu.enable_dock_click" = "Enable Dock Click to Minimize";
-"menu.quit" = "Quit Traffic Lights+";
+"menu.quit" = "Quit Traffic Lights Glass";
 
 "window_menu.title" = "Window Layout";
 "window_menu.move_resize" = "Move & Resize";

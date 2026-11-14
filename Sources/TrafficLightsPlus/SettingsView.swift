@@ -43,7 +43,7 @@ struct SettingsView: View {
                 .foregroundStyle(.blue)
                 .frame(width: 38, height: 38)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Traffic Lights+")
+                Text("Traffic Lights Glass")
                     .font(.title2.bold())
                 Text(localized(.settingsSubtitle))
                     .foregroundStyle(.secondary)
@@ -275,8 +275,14 @@ struct SettingsView: View {
 
     private var softwareUpdates: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(localized(.softwareUpdates))
-                .font(.headline)
+            HStack {
+                Text(localized(.softwareUpdates))
+                    .font(.headline)
+                Spacer()
+                if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+                    Text("v\(version)").monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
             Toggle(
                 localized(.automaticallyCheckForUpdates),
                 isOn: Binding(

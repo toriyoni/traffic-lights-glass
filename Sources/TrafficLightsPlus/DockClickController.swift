@@ -53,10 +53,10 @@ final class DockClickController {
 
     private let preferences: Preferences
     private let minimizeHandler: (pid_t) -> Bool
-    private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "dock-click")
+    private let logger = Logger(subsystem: "app.trafficlightsplus.glass.local", category: "dock-click")
     private let systemWideElement = AXUIElementCreateSystemWide()
     private let dockFrameQueryQueue = DispatchQueue(
-        label: "app.trafficlightsplus.mac.dock-frame",
+        label: "app.trafficlightsplus.glass.local.dock-frame",
         qos: .utility
     )
     private var eventTap: CFMachPort?

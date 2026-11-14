@@ -119,13 +119,13 @@ final class StageManagerCloseController {
     private static let dismissalDuration = 1.0
 
     private let preferences: Preferences
-    private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "stage-manager-close")
+    private let logger = Logger(subsystem: "app.trafficlightsplus.glass.local", category: "stage-manager-close")
     private let scanQueue = DispatchQueue(
-        label: "app.trafficlightsplus.mac.stage-manager-close.scan",
+        label: "app.trafficlightsplus.glass.local.stage-manager-close.scan",
         qos: .utility
     )
     private let actionQueue = DispatchQueue(
-        label: "app.trafficlightsplus.mac.stage-manager-close.action",
+        label: "app.trafficlightsplus.glass.local.stage-manager-close.action",
         qos: .userInitiated
     )
     private var scanTimer: Timer?

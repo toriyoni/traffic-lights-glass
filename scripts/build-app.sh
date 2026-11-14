@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT="${0:A:h:h}"
+source "$ROOT/scripts/release-config.sh"
 TARGET_ARCH="${TARGET_ARCH:-$(uname -m)}"
-APP="${APP_OUTPUT:-$ROOT/build/Traffic Lights Plus.app}"
+APP="${APP_OUTPUT:-$ROOT/build/$RELEASE_APP_NAME.app}"
 ICONSET="$ROOT/.build/AppIcon.iconset"
 ICON="$ROOT/Resources/AppIcon.icns"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
@@ -20,16 +21,10 @@ TRIPLE="$TARGET_ARCH-apple-macosx13.0"
 SCRATCH="$ROOT/.build/$TARGET_ARCH"
 AD_HOC_ENTITLEMENTS="$ROOT/Resources/TrafficLightsPlus.ad-hoc.entitlements"
 
-case "$TARGET_ARCH" in
-    arm64)
-        FEED_URL="https://liu223344.github.io/traffic-light-plus/appcast-arm64.xml"
-        ;;
-    x86_64)
-        FEED_URL="https://liu223344.github.io/traffic-light-plus/appcast-x86_64.xml"
-        ;;
-esac
+FEED_URL="$(release_feed_url "$TARGET_ARCH")"
 
 cd "$ROOT"
+"$ROOT/scripts/check-glass-sdk.sh"
 export CLANG_MODULE_CACHE_PATH="$ROOT/.build/ModuleCache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$ROOT/.build/ModuleCache"
 BUILD_OPTIONS=(
@@ -65,7 +60,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Framewor
 cp "$APP_BINARY" "$APP/Contents/MacOS/TrafficLightsPlus"
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 plutil -replace SUFeedURL -string "$FEED_URL" "$APP/Contents/Info.plist"
+[[ "$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")" == "$RELEASE_BUNDLE_ID" ]]
 cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"
+cp "$ROOT/LICENSE" "$APP/Contents/Resources/LICENSE.txt"
+cp "$ROOT/Resources/Sparkle-LICENSE.txt" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 cp -R "$ROOT/Sources/TrafficLightsPlus/Resources/zh-Hans.lproj" "$APP/Contents/Resources/"
 cp -R "$ROOT/Sources/TrafficLightsPlus/Resources/en.lproj" "$APP/Contents/Resources/"
 ditto "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
@@ -90,7 +88,7 @@ if [[ "$SIGNING_IDENTITY" == "-" ]]; then
         --sign - "$APP/Contents/Frameworks/Sparkle.framework"
     codesign --force --options runtime --timestamp=none \
         --entitlements "$AD_HOC_ENTITLEMENTS" --sign - \
-        --requirements '=designated => identifier "app.trafficlightsplus.mac"' \
+        --requirements "=designated => identifier \"$RELEASE_BUNDLE_ID\"" \
         "$APP"
 else
     codesign --force --deep --options runtime --timestamp \

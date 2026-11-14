@@ -1,329 +1,80 @@
-# Traffic Lights+
+# Traffic Lights Glass
 
-> **本源码包含 Liquid Glass 整组展开修改。** 构建入口与当前验证状态见
-> [BUILD-LIQUID-GLASS.md](BUILD-LIQUID-GLASS.md)。原生玻璃需 Xcode 26 / macOS 26 SDK；
-> 此修改已在本机 macOS 27.2.1 构建并验证。下方发布链接及早期界面截图属于原版项目。
+给 macOS 窗口红绿灯加上一块原生液态玻璃胶囊，让按钮更容易指向，同时保留轻巧的悬停反馈。
 
-[![Upstream CI](https://github.com/Liu223344/traffic-light-plus/actions/workflows/ci.yml/badge.svg)](https://github.com/Liu223344/traffic-light-plus/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Liu223344/traffic-light-plus)](https://github.com/Liu223344/traffic-light-plus/releases/latest)
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black)](https://www.apple.com/macos/)
+[![CI](https://github.com/toriyoni/traffic-lights-glass/actions/workflows/ci.yml/badge.svg)](https://github.com/toriyoni/traffic-lights-glass/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/toriyoni/traffic-lights-glass)](https://github.com/toriyoni/traffic-lights-glass/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-[简体中文](#简体中文) | [English](#english)
+[下载最新版 / Download](https://github.com/toriyoni/traffic-lights-glass/releases/latest) · [发行说明](docs/releases/1.0.0.md) · [隐私说明](PRIVACY.md) · [构建与发行](BUILD-LIQUID-GLASS.md)
 
-## 功能预览 / Feature Preview
+## 功能
 
-<p align="center">
-  <a href="docs/images/enlarged-traffic-lights.jpg">
-    <img src="docs/images/enlarged-traffic-lights.jpg" alt="放大的 macOS 红绿灯按钮 / Enlarged macOS traffic lights" width="960">
-  </a>
-  <br>
-  <sub>放大红绿灯 / Enlarged traffic lights</sub>
-</p>
+- 系统原生玻璃胶囊与彩色按钮，带折射、边缘高光和随指针移动的柔光。
+- 只放大当前悬停的灯，轻微向指针吸附；胶囊平滑伸展，动画先快后慢、没有回弹。
+- 三个灯之间连续命中，胶囊两端与红绿灯同心。
+- 在绿灯上停留后显示固定位置的窗口菜单。朝菜单移动时有短暂进入保护，边缘轻微出界可恢复；保护区不拦截其他控件和窗口的点击。
+- 应用名单设置优先于全局开关，可单独禁用某个应用的红绿灯放大。
+- “透明度跟随系统”默认开启；关闭后本应用保持清透，系统“降低透明度”仍有效。
+- 按钮大小 18–48 pt、独立按钮动作、隐藏式红绿灯、Dock 点击最小化、台前调度关闭按钮。
+- 简体中文与英文界面；软件更新直接连接本仓库的 GitHub Releases。
 
-<p align="center">
-  <a href="docs/images/stage-manager-close-button.jpg">
-    <img src="docs/images/stage-manager-close-button.jpg" alt="台前调度缩略图关闭按钮 / Stage Manager thumbnail close button" width="960">
-  </a>
-  <br>
-  <sub>台前调度缩略图关闭按钮 / Stage Manager thumbnail close button</sub>
-</p>
+当前只保留液态玻璃外观，旧圆形和贴边方块配置会自动迁移。此前的开发和验证记录见 [docs](docs)。
 
-## 简体中文
+## 下载与安装
 
-Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗口左上角的关闭、最小化和缩放按钮放大，让它们更容易看清和点击。它不修改系统文件、不注入其他进程，也不需要关闭 SIP。
+在 [Releases](https://github.com/toriyoni/traffic-lights-glass/releases/latest) 选择适合芯片的安装包：
 
-### 界面预览
+| Mac | 文件名后缀 |
+| --- | --- |
+| Apple Silicon / M 系列 | `-arm64.dmg` 或 `-arm64.zip` |
+| Intel | `-x86_64.dmg` 或 `-x86_64.zip` |
 
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/images/settings-zh-hans-top.png">
-        <img src="docs/images/settings-zh-hans-top.png" alt="Traffic Lights+ 中文设置界面上半部分">
-      </a>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/images/settings-zh-hans-bottom.png">
-        <img src="docs/images/settings-zh-hans-bottom.png" alt="Traffic Lights+ 中文设置界面下半部分">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><sub>设置上半部分</sub></td>
-    <td align="center"><sub>设置下半部分</sub></td>
-  </tr>
-</table>
+1. 打开 DMG，将 **Traffic Lights Glass.app** 拖入“应用程序”；ZIP 用户解压后把应用移入“应用程序”。
+2. 启动应用，在“系统设置 → 隐私与安全性 → 辅助功能”中授予权限。
+3. 从菜单栏进入设置。隐藏菜单栏图标后，重新打开应用即可进入设置。
 
-### 下载
+首发采用 ad-hoc 签名，**尚未进行 Apple 公证**。首次下载打开可能被系统拦截；确认来源后请按 [Apple 官方说明](https://support.apple.com/102445) 操作，不需要关闭 SIP 或全局 Gatekeeper。每个 Release 提供 `SHA256SUMS.txt`，应用内更新还会验证独立的 Ed25519 签名。
 
-从 [Releases](https://github.com/Liu223344/traffic-light-plus/releases/latest) 下载最新版：
+## 软件更新
 
-- `Traffic-Lights-Plus-<版本>-arm64.dmg`：Apple Silicon Mac，推荐。
-- `Traffic-Lights-Plus-<版本>-x86_64.dmg`：Intel Mac，推荐。
-- `Traffic-Lights-Plus-<版本>-arm64.zip`：Apple Silicon Mac 的免 DMG 压缩包。
-- `Traffic-Lights-Plus-<版本>-x86_64.zip`：Intel Mac 的免 DMG 压缩包。
-- `SHA256SUMS.txt`：用于校验下载文件。
+设置中的“检查更新…”和菜单栏中的同名入口均可用。默认定期检查更新，后台下载默认关闭，可在设置中开启。
 
-当前公开构建使用 ad-hoc 签名，尚未经过 Apple 公证。macOS 首次阻止启动时，请在 Finder 中右键应用并选择“打开”。
+更新清单和安装包全部托管在本仓库 Release，按芯片类型分别提供。更新不会连接原版 Traffic Lights+ 的更新源。私钥保存在维护者的本机钥匙串，更新清单和归档均须通过内置公钥验证。
 
-### 功能
+## 系统要求与已知限制
 
-- 红绿灯尺寸可在 `18-48 pt` 范围内调整。
-- 液态玻璃模式只放大当前悬停的灯，并轻微向指针吸附；三个灯之间可连续滑动和点击，胶囊两端与红绿灯同心，其他灯保持稳定。胶囊和灯面带有随指针移动的柔光与局部边缘反光，菜单与灯的交互独立。见[交互效果](docs/pointer-light-and-interaction.md)。
-- 液态玻璃提供“透明度跟随系统”开关：默认跟随系统外观中的 Liquid Glass，关闭后固定为清透效果。见[透明度与菜单验证](docs/system-glass-transparency.md)。
-- 仅保留液态玻璃外观；旧版圆形、贴边方块配置自动迁移，其他设置保留。
-- “隐藏式红绿灯”在靠近时展开整组胶囊，内部按钮分别响应悬停。
-- 在当前活跃窗口中悬停配置为“缩放窗口”的绿灯，可打开固定在绿灯旁的玻璃菜单；斜向移入菜单有短暂保护、菜单边缘有少量容错，移到其他灯或转向外部立即关闭，调用系统平铺、排列及全屏操作。见[菜单定位与验证](docs/anchored-window-menu.md)。
-- 窗口位置通过系统通知更新；隐藏式红绿灯由鼠标接近触发，仅在展开、收起期间刷新动画，避免持续高频追踪。
-- 最小化前快速缩小并隐藏覆盖按钮，避免覆盖层留在系统动画中。
-- 再次点击当前前台应用的 Dock 图标时，可最小化该应用的当前窗口。
-- 鼠标靠近台前调度缩略图左上角时显示关闭按钮，直接关闭分组中最上层的窗口。
-- 可分别把红、黄、绿按钮设置为关闭窗口、退出应用、最小化、缩放、隐藏应用或无操作。
-- 支持所有可见普通窗口和多显示器；全屏窗口支持仍在开发中。
-- 设置界面支持简体中文和英文，可在应用内即时切换。
-- 可选择隐藏菜单栏里的 Traffic Lights+ 图标；隐藏后重新打开应用即可进入设置。
-- 默认定期检查并后台下载正式版更新，安装和重启前由用户确认。
-- 设置即时生效并通过 `UserDefaults` 保存在本机。
-- 除软件更新外无网络请求；无分析统计、遥测、广告和账号系统。
+- macOS 13+；**原生 Liquid Glass 需要 macOS 26+**，较早版本使用后备材质。
+- 需要标准 macOS 辅助功能窗口按钮。部分自绘标题栏、远程软件窗口可能不兼容，可用应用名单单独关闭。
+- 全屏窗口中的覆盖层仍在开发中；菜单的进入全屏命令可用。
+- 原生高光与系统玻璃透明度覆盖有少量非公开兼容处理，已隔离在相关代码中，后续 macOS 更新需复测。
+- 当前本机视觉验证环境为 Apple Silicon / macOS 27.2.1；自动检查与架构验证不等于所有 Mac、显示器和第三方应用均已人工测试。
 
-### 系统要求
+## 构建
 
-- macOS 13 Ventura 或更高版本。
-- Apple Silicon 或 Intel Mac，请下载与芯片架构对应的发布文件。
-- 目标应用需要提供标准 macOS 辅助功能窗口按钮。
-
-### 安装与权限
-
-1. 下载并打开 DMG，将 `Traffic Lights Plus.app` 拖入“应用程序”。
-2. 启动 Traffic Lights+，从菜单栏图标打开“设置”。
-3. 点击“打开辅助功能设置”，在“隐私与安全性 > 辅助功能”中允许 Traffic Lights+。
-4. 如果应用已在权限列表中但仍未生效，请关闭并重新启动应用。
-
-辅助功能权限仅用于发现标准窗口按钮、读取窗口位置并执行用户配置的窗口操作。完整说明见 [PRIVACY.md](PRIVACY.md)。
-
-### 使用
-
-Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
-
-- 放大红绿灯开关、尺寸及液态玻璃透明度；
-- 隐藏式红绿灯开关；
-- 红、黄、绿三个按钮各自的操作；
-- 独立的“关闭时退出应用”开关和应用名单，关闭放大红绿灯后仍然生效；
-- “在全屏窗口中显示（开发中）”当前不可勾选。
-- 独立的 Dock 开关：再次点击应用图标时最小化当前窗口，无需开启放大红绿灯。
-- 独立的台前调度关闭按钮开关：在缩略图左上角直接关闭当前最上层窗口。
-- “语言 / Language”可在简体中文和英文之间即时切换。
-- “显示菜单栏图标”可单独关闭；隐藏图标后可重新打开应用进入设置。
-- “软件更新”可分别控制自动检查、自动下载，也可立即手动检查。
-
-隐藏模式开启时，将鼠标移到窗口左上角红绿灯区域即可显示放大按钮。按钮被其他窗口遮挡时不会显示或参与选择。
-
-### 已知限制
-
-- 使用自行绘制标题栏、未暴露标准 AX 按钮的应用可能无法使用。
-- 覆盖按钮属于独立的非激活面板，无法真正加入其他应用的窗口合成树。
-- 当前公开构建未公证，因此首次启动可能出现 Gatekeeper 提示。
-- `v1.3.0` 及更早版本不包含更新器，需要手动安装一次 `v1.4.0`，之后才能自动升级。
-
-### 从源码构建
-
-需要 Xcode Command Line Tools：
+使用匹配的 Xcode 26 / macOS 26 SDK 或更新版本：
 
 ```sh
-git clone https://github.com/Liu223344/traffic-light-plus.git
-cd traffic-light-plus
-swift test
-./scripts/build-app.sh
-open "build/Traffic Lights Plus.app"
+git clone https://github.com/toriyoni/traffic-lights-glass.git
+cd traffic-lights-glass
+bash Build-Liquid-Glass.command
+open "build/Traffic Lights Glass.app"
 ```
 
-`build-app.sh` 默认构建当前 Mac 的原生架构，也可以显式指定：
-
-```sh
-TARGET_ARCH=arm64 ./scripts/build-app.sh
-TARGET_ARCH=x86_64 ./scripts/build-app.sh
-```
-
-生成两种架构的独立发布文件：
-
-```sh
-./scripts/package-dmg.sh
-./scripts/package-zip.sh
-```
-
-产物分别带有 `-arm64` 和 `-x86_64` 后缀。发布打包使用独立临时应用，不会覆盖 `build/Traffic Lights Plus.app` 中的本机开发构建。
-
-默认使用 ad-hoc 签名。持有 Developer ID 的发布者可以设置：
-
-```sh
-SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package-dmg.sh
-```
-
-### 实现方式
-
-macOS 没有公开 API 可以跨进程修改原生红绿灯尺寸。本项目使用辅助功能 API 获取标准窗口按钮和执行操作，使用 WindowServer 窗口信息匹配位置与遮挡，再通过三个独立的非激活透明面板绘制放大按钮。所有处理均在本机完成。
-
-### 参与贡献
-
-提交改动前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，并至少运行：
-
-```sh
-swift test
-./scripts/build-app.sh
-codesign --verify --deep --strict "build/Traffic Lights Plus.app"
-```
-
-安全问题请按 [SECURITY.md](SECURITY.md) 中的方式报告，不要直接公开未修复漏洞。
-
-### 许可证
-
-Traffic Lights+ 采用 [MIT License](LICENSE)。
+构建脚本验证原生玻璃 SDK、运行测试、构建并签名应用。发布包生成、独立签名、双架构验证及 Release 草稿流程见 [构建与发行](BUILD-LIQUID-GLASS.md)。
 
 ## English
 
-Traffic Lights+ is a native macOS menu bar utility that enlarges the close, minimize, and zoom controls in the top-left corner of other application windows, making them easier to see and click. It does not modify system files, inject code into other processes, or require System Integrity Protection to be disabled.
+Traffic Lights Glass enlarges macOS window controls inside a native Liquid Glass capsule. It provides independent button magnification, subtle pointer attraction, pointer lighting, an anchored window-layout menu, per-app overrides, and a switch to follow the system glass appearance.
 
-### Interface Preview
+Download **arm64** for Apple Silicon or **x86_64** for Intel from [Releases](https://github.com/toriyoni/traffic-lights-glass/releases/latest). Move the app into Applications and grant Accessibility access. macOS 13+ is required; native Liquid Glass requires macOS 26+.
 
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <a href="docs/images/settings-en-top.png">
-        <img src="docs/images/settings-en-top.png" alt="Top section of the Traffic Lights+ English settings interface">
-      </a>
-    </td>
-    <td width="50%" align="center">
-      <a href="docs/images/settings-en-bottom.png">
-        <img src="docs/images/settings-en-bottom.png" alt="Bottom section of the Traffic Lights+ English settings interface">
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Settings, top section</sub></td>
-    <td align="center"><sub>Settings, bottom section</sub></td>
-  </tr>
-</table>
+The first release is ad-hoc signed and **not Apple-notarized**. Refer to [Apple's official first-launch guidance](https://support.apple.com/102445) if needed. Updates use this repository's GitHub Release assets and require independently signed feeds and archives. Automatic checks are enabled by default; automatic downloads are optional.
 
-### Download
+The app performs window and pointer processing locally. It contains no analytics or advertising. See [Privacy](PRIVACY.md) for the ordinary network metadata involved in update requests.
 
-Download the latest version from [Releases](https://github.com/Liu223344/traffic-light-plus/releases/latest):
+## License and attribution
 
-- `Traffic-Lights-Plus-<version>-arm64.dmg`: recommended for Apple Silicon Macs.
-- `Traffic-Lights-Plus-<version>-x86_64.dmg`: recommended for Intel Macs.
-- `Traffic-Lights-Plus-<version>-arm64.zip`: ZIP package for Apple Silicon Macs.
-- `Traffic-Lights-Plus-<version>-x86_64.zip`: ZIP package for Intel Macs.
-- `SHA256SUMS.txt`: checksums for verifying downloaded files.
+基于 [Liu223344 / Traffic Lights+](https://github.com/Liu223344/traffic-light-plus) 开发，保留原项目 MIT 许可证与署名。更新框架来自 [Sparkle](https://sparkle-project.org/)，其许可证同时包含在源码和应用资源内。
 
-Public builds currently use ad-hoc code signing and are not notarized by Apple. If macOS blocks the app on first launch, right-click it in Finder and choose **Open**.
-
-### Features
-
-- Adjustable traffic-light control size from `18-48 pt`.
-- Liquid Glass is the only appearance; retired circular/square selections migrate while other preferences are preserved.
-- Hidden traffic lights reveal the capsule as a group, with independent hover feedback for each light.
-- Hover over the green button configured to zoom the active window to open its anchored glass menu. Directional entry protection and small edge tolerance make the menu easier to reach. These regions pass clicks through; moving to another light or away closes the menu.
-- Follow System Glass Transparency defaults to on. Turning it off keeps this app clear independently of the system Liquid Glass setting. See [validation and compatibility details](docs/system-glass-transparency.md).
-- Window positions update through system notifications. Hidden traffic lights react to pointer proximity and refresh animations only while expanding or collapsing, without continuous high-frequency tracking.
-- Overlay controls quickly shrink and disappear before minimization to avoid remaining visible during the system animation.
-- Click the current frontmost application's Dock icon again to minimize its active window.
-- Reveal close buttons near the top-left of Stage Manager thumbnails to close the frontmost window in a group directly.
-- Configure the red, yellow, and green controls independently to close a window, quit an app, minimize, zoom, hide an app, or do nothing.
-- Supports all visible standard windows and multiple displays. Full-screen window support is still in development.
-- The settings interface supports Simplified Chinese and English with immediate in-app switching.
-- The Traffic Lights+ menu bar icon can be hidden; reopen the app to access Settings afterward.
-- Stable releases are checked periodically and downloaded in the background by default; installation and relaunch require user confirmation.
-- Settings take effect immediately and are stored locally with `UserDefaults`.
-- No network access except software updates, and no analytics, telemetry, advertisements, or account system.
-
-### Requirements
-
-- macOS 13 Ventura or later.
-- An Apple Silicon or Intel Mac. Download the package matching your Mac's architecture.
-- Target applications must expose standard macOS window controls through the Accessibility API.
-
-### Installation And Permissions
-
-1. Download and open the DMG, then drag `Traffic Lights Plus.app` into Applications.
-2. Launch Traffic Lights+ and open Settings from its menu bar icon.
-3. Select **Open Accessibility Settings**, then allow Traffic Lights+ under **Privacy & Security > Accessibility**.
-4. If the app is already listed but does not work, quit and relaunch it.
-
-Accessibility permission is used only to discover standard window controls, read window positions, and perform the window actions configured by the user. See [PRIVACY.md](PRIVACY.md) for details.
-
-### Usage
-
-Traffic Lights+ remains available in the menu bar after launch. Its settings include:
-
-- the enlarged-traffic-light switch, control size, and Liquid Glass transparency;
-- the hidden-traffic-lights switch;
-- independent actions for the red, yellow, and green controls;
-- an independent quit-on-close switch and application list that also work with enlarged traffic lights disabled;
-- a disabled **Show in full-screen windows (In development)** option.
-- an independent Dock switch that minimizes the active window when its application icon is clicked again, without requiring enlarged traffic lights.
-- an independent Stage Manager option that adds a close button to each thumbnail for its frontmost window.
-- a **语言 / Language** selector for switching immediately between Simplified Chinese and English.
-- a **Show Menu Bar Icon** toggle; reopen the app to access Settings after hiding it.
-- a **Software Updates** section for automatic checks, automatic downloads, and immediate manual checks.
-
-When hidden mode is enabled, move the pointer into the traffic-light area in the top-left corner of a window to reveal the enlarged controls. Controls covered by another window are neither displayed nor included in selection.
-
-### Known Limitations
-
-- Applications with custom-drawn title bars that do not expose standard AX controls may not work.
-- Overlay controls are separate non-activating panels and cannot become part of another application's window composition tree.
-- Public builds are not notarized, so Gatekeeper may display a warning on first launch.
-- Versions `v1.3.0` and earlier do not contain the updater. Install `v1.4.0` manually once to receive later automatic updates.
-
-### Build From Source
-
-Xcode Command Line Tools are required:
-
-```sh
-git clone https://github.com/Liu223344/traffic-light-plus.git
-cd traffic-light-plus
-swift test
-./scripts/build-app.sh
-open "build/Traffic Lights Plus.app"
-```
-
-`build-app.sh` builds for the current Mac architecture by default. You can also select one explicitly:
-
-```sh
-TARGET_ARCH=arm64 ./scripts/build-app.sh
-TARGET_ARCH=x86_64 ./scripts/build-app.sh
-```
-
-Generate separate release packages for both architectures:
-
-```sh
-./scripts/package-dmg.sh
-./scripts/package-zip.sh
-```
-
-Artifacts use `-arm64` and `-x86_64` suffixes. Release packaging uses isolated temporary app bundles and does not overwrite the native development build at `build/Traffic Lights Plus.app`.
-
-Ad-hoc signing is used by default. Publishers with a Developer ID certificate can set:
-
-```sh
-SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package-dmg.sh
-```
-
-### How It Works
-
-macOS does not provide a public API for resizing native traffic-light controls across processes. Traffic Lights+ uses the Accessibility API to discover standard controls and perform actions, WindowServer window information to match positions and occlusion, and three independent non-activating transparent panels to draw the enlarged controls. All processing happens locally on the Mac.
-
-### Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes, and run at least:
-
-```sh
-swift test
-./scripts/build-app.sh
-codesign --verify --deep --strict "build/Traffic Lights Plus.app"
-```
-
-Report security issues using the process in [SECURITY.md](SECURITY.md). Do not publicly disclose unresolved vulnerabilities.
-
-### License
-
-Traffic Lights+ is available under the [MIT License](LICENSE).
+Based on Traffic Lights+ by Liu223344. The original [MIT license](LICENSE) and attribution are retained. Sparkle's license is included in [Resources/Sparkle-LICENSE.txt](Resources/Sparkle-LICENSE.txt) and the distributed app.

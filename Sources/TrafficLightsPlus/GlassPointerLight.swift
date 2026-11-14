@@ -63,16 +63,27 @@ struct GlassLightGeometry {
                 let origin = current, control = element.points[0], end = element.points[1]
                 for step in 1...12 {
                     let t = CGFloat(step) / 12, u = 1 - t
-                    points.append(CGPoint(x: u*u*origin.x + 2*u*t*control.x + t*t*end.x,
-                                          y: u*u*origin.y + 2*u*t*control.y + t*t*end.y))
+                    // Explicit coefficients avoid a Swift 6.2 type-checker
+                    // timeout in the C path callback. Sampling is unchanged.
+                    let w0: CGFloat = u * u
+                    let w1: CGFloat = 2 * u * t
+                    let w2: CGFloat = t * t
+                    let x: CGFloat = w0 * origin.x + w1 * control.x + w2 * end.x
+                    let y: CGFloat = w0 * origin.y + w1 * control.y + w2 * end.y
+                    points.append(CGPoint(x: x, y: y))
                 }
                 current = end
             case .addCurveToPoint:
                 let origin = current, a = element.points[0], b = element.points[1], end = element.points[2]
                 for step in 1...16 {
                     let t = CGFloat(step) / 16, u = 1 - t
-                    points.append(CGPoint(x: u*u*u*origin.x + 3*u*u*t*a.x + 3*u*t*t*b.x + t*t*t*end.x,
-                                          y: u*u*u*origin.y + 3*u*u*t*a.y + 3*u*t*t*b.y + t*t*t*end.y))
+                    let w0: CGFloat = u * u * u
+                    let w1: CGFloat = 3 * u * u * t
+                    let w2: CGFloat = 3 * u * t * t
+                    let w3: CGFloat = t * t * t
+                    let x: CGFloat = w0 * origin.x + w1 * a.x + w2 * b.x + w3 * end.x
+                    let y: CGFloat = w0 * origin.y + w1 * a.y + w2 * b.y + w3 * end.y
+                    points.append(CGPoint(x: x, y: y))
                 }
                 current = end
             case .closeSubpath: points.append(start); current = start

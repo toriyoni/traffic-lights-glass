@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import TrafficLightsPlus
 
@@ -17,14 +18,20 @@ import Testing
 }
 
 @Test func updaterConfigurationRequiresAnHTTPSFeedAndPublicKey() {
+    let key = Data(repeating: 1, count: 32).base64EncodedString()
     #expect(UpdateController.configurationAvailable(
         feedURL: "https://example.com/appcast.xml",
-        publicKey: "public-key"
+        publicKey: key
     ))
-    #expect(!UpdateController.configurationAvailable(feedURL: nil, publicKey: "public-key"))
+    #expect(!UpdateController.configurationAvailable(feedURL: nil, publicKey: key))
+    for invalidKey in ["public-key", Data(repeating: 1, count: 31).base64EncodedString(), Data(repeating: 1, count: 33).base64EncodedString()] {
+        #expect(!UpdateController.configurationAvailable(feedURL: "https://example.com/appcast.xml", publicKey: invalidKey))
+    }
+    #expect(!UpdateController.configurationAvailable(feedURL: "https:///appcast.xml", publicKey: key))
+    #expect(!UpdateController.configurationAvailable(feedURL: "https://name:password@example.com/appcast.xml", publicKey: key))
     #expect(!UpdateController.configurationAvailable(
         feedURL: "http://example.com/appcast.xml",
-        publicKey: "public-key"
+        publicKey: key
     ))
     #expect(!UpdateController.configurationAvailable(
         feedURL: "https://example.com/appcast.xml",

@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import Sparkle
 
 final class UpdateController: NSObject, ObservableObject {
@@ -62,8 +63,11 @@ final class UpdateController: NSObject, ObservableObject {
         guard let feedURL,
               let url = URL(string: feedURL),
               url.scheme?.lowercased() == "https",
-              let publicKey else { return false }
-        return !publicKey.isEmpty
+              let host = url.host, !host.isEmpty,
+              url.user == nil, url.password == nil,
+              let publicKey,
+              let decodedKey = Data(base64Encoded: publicKey) else { return false }
+        return decodedKey.count == 32
     }
 
     private func observeUpdater() {

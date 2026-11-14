@@ -1,85 +1,67 @@
-# Traffic Lights Glass：整组玻璃红绿灯
+# 构建与发行 Traffic Lights Glass
 
-这是基于 [Traffic Lights+](https://github.com/Liu223344/traffic-light-plus) 的源码修改版。目标是在鼠标靠近红绿灯区域时，用同一块玻璃胶囊承载三个按钮，并让三个按钮一起平滑展开、收起。
+## 本机构建
 
-**当前状态：已在本机 macOS 27.2.1 上构建并实测，144 项 Swift 测试通过。** 原生高光缺失的原因、对照截图及本机兼容办法见 [原生玻璃高光实验](docs/native-glass-highlight.md)。三个按钮现已改用原生彩色玻璃，见 [按钮材质对照](docs/native-glass-buttons.md)，并已校正偏深、偏饱和的染色，见 [颜色对照](docs/glass-button-color.md)；整组动画采用先快后慢、没有超调和回弹的缓出曲线，见 [开合动画对照](docs/ease-out-capsule-animation.md)。展开后，单灯放大与吸附在三个按钮间连续接续；胶囊两端与红、绿灯同心，画圈时其他灯保持固定，并增加随指针移动的局部柔光与边缘反光。菜单不再冻结红绿灯，黄灯可轻微带动胶囊上下移动，顶部首帧错位已修正。见 [指针光照与交互修正](docs/pointer-light-and-interaction.md)。源码仍可按下列步骤自行构建。
-
-## 本次修改
-
-- 增加同源指针光照：胶囊和三个灯共享光源位置，灯面柔光随指针移动，靠近实际边缘时局部反光增强；光照不拦截输入，符号绘制在光照之上。
-- 黄灯吸附时胶囊最多上下微动 0.6 pt，红、绿灯的位置保持固定。窗口选择菜单只固定自己的锚点，不暂停灯的缩放、吸附和光照。
-- 覆盖面板与菜单的透明外边距不再触发 AppKit 首次显示的自动挪位；先在原生小灯位置预布局并提交图层，再开始显现。顶部对照首帧偏移从 22 pt 变为 0。
-
-- 悬停绿灯后，应用自己的玻璃菜单固定在可见按钮旁，弹窗位置不随指针移动，红绿灯的缩放和吸附独立响应；优先调用目标应用“窗口”菜单的系统平铺与排列命令。原生菜单不可重新定位的实测结果及新菜单验证见 [固定菜单](docs/anchored-window-menu.md)。
-- 应用名单独立于“关闭时退出应用”，支持每个应用的放大设置“跟随全局 / 开启 / 关闭”，单独设置优先于全局开关；旧退出名单自动迁移。见 [应用名单与优先级验证](docs/application-rules.md)。
-- macOS 26+ 使用 SwiftUI 的 `glassEffect(_:in:)` 渲染始终保持上下对称圆角的完整胶囊，材质与高光保持原生；彩色按钮使用 `NSGlassEffectView` 在前景独立缩放。旧系统回退到单块 `NSVisualEffectView`；开启“降低透明度”时使用同轮廓的不透明胶囊。
-- 圆形按钮与相邻的视觉间隙组成连续交互区域，左右滑动不会掉回全部未悬停状态；间隙点击归属唯一的相邻按钮。放大倍率为 1.45，放大时消耗原间隙，仍保留可见分隔。红绿灯略向外让位，黄灯让两侧等距退让。单灯吸附最多 2 pt，其他灯的坐标固定；45 ms 时间常数的指数缓出先快后慢、不回弹。见 [交互验证](docs/precision-hover-capsule.md)。
-- 胶囊由两个圆心取自红、绿灯中心的半圆及公切线构成，吸附时保持同心；原生玻璃在固定画布上绘制，边缘额外留出 16 pt，按钮使用独立固定图层，避免高光裁切和其他灯漂移。
-- 胶囊与三个按钮共用三次缓出曲线：完整展开 0.24 秒、收起 0.18 秒，先快后慢，精确停在目标尺寸。离开后保留 0.10 秒宽限期；中途重入从当前尺寸转向新目标，短距离过渡自动缩短。“减少动态效果”开启时直接切换大小。
-- 按钮的位置、尺寸与胶囊同步减速到位，不超调、不回弹；固定透明窗口中的玻璃视图独立缩放，避免顶层窗口取整引起末段跳动。
-- 深、浅色模式分别校准按钮玻璃的染色输入；悬停不再加重颜色，按下只轻微变暗，减小普通红绿灯与玻璃按钮的色彩落差。
-- 按钮默认直径 28 pt、间隔 8 pt、胶囊内边距 8 pt；尺寸沿用设置界面的滑杆。放大后的按钮之间保持间隔。
-- 鼠标在整个胶囊内移动时保持展开；外侧留白不主动拦截标题栏点击或拖动；按钮之间的视觉间隙参与悬停和点击。
-- 遮挡、隐藏及关闭 / 最小化按整个胶囊处理；原生绿灯操作前隐藏玻璃覆盖层。
-- 仅保留液态玻璃外观；旧圆形/贴边方块设置自动迁移，已删除其绘制、布局分支和多余的独立覆盖窗口。
-
-胶囊与按钮的玻璃材质、折射和边缘高光由系统绘制；自定义外轮廓、图标、布局和动画由本项目提供。macOS 26 及以上使用 `.regular` 胶囊与带颜色的 `.clear` 圆形按钮，设置预览和实际覆盖层复用同一套按钮视图。
-
-透明度开关默认跟随系统 Liquid Glass 设置，关闭后只在本应用中保持清透；绿灯菜单保留进入菜单的通道，移到其他灯或外部立即关闭。实现边界与对照验证见 [系统透明度和菜单生命周期](docs/system-glass-transparency.md)。
-
-菜单新增朝菜单方向的进入保护和边缘容错，保护区不拦截点击；外观清理和验证见 [菜单进入保护](docs/menu-approach-protection.md)。
-
-## 在 Mac 上构建
-
-需要 **Xcode 26 / macOS 26 SDK 或更新版本**，以及首次下载 Swift Package 依赖所需的网络连接。原生 Liquid Glass 在 macOS 26 及更新系统运行；较早的 macOS 使用磨砂材质后备方案。
-
-克隆本仓库或解压源码，打开终端，进入该目录后运行：
+需要匹配的 Xcode 26 / macOS 26 SDK 或更新版本。Swift Package Manager 固定使用 Sparkle 2.9.2。
 
 ```sh
 bash Build-Liquid-Glass.command
 ```
 
-也可在 Finder 中双击 `Build-Liquid-Glass.command`。如果当前开发工具未提供原生玻璃 API，脚本会明确停止；在 Xcode 的 **Settings → Locations → Command Line Tools** 中选择新版本后再运行。
+脚本检查原生玻璃 API、运行测试、构建并签名 `build/Traffic Lights Glass.app`，不会自行安装应用。`TARGET_ARCH=arm64` 或 `TARGET_ARCH=x86_64` 可用于指定架构；`SDKROOT` 可选择与当前编译器匹配的 SDK。
 
-脚本会按顺序：
+发布版继续使用 `app.trafficlightsplus.glass.local` 标识，保持已有定制版的设置和辅助功能授权。产品名称为 Traffic Lights Glass，内部 Swift 模块名保留 TrafficLightsPlus。版本号由 `Info.plist` 管理；内部构建号必须严格递增，首发为 1.0.0 / build 10，先前开发版继承的构建号为 9。
 
-1. 对 `NSGlassEffectView` 和 SwiftUI 的自定义形状玻璃接口做 SDK 类型检查，确认所选开发工具提供所需 API。
-2. 运行项目的 `swift test`；失败则停止构建。
-3. 调用原有发布构建脚本，为当前 Mac 架构构建应用。
-4. 将产物设为独立的 `Traffic Lights Glass.app`，使用 `app.trafficlightsplus.glass.local` 标识，移除上游更新源并重新进行本机 ad-hoc 签名、验证签名。
-5. 在 Finder 中显示 `build/Traffic Lights Glass.app`，由你决定何时启动或移入“应用程序”。
+## 更新链路
 
-原版的安装与设置不会被覆盖；定制版有自己的设置域。定制版不接收原版自动更新，以免丢失本次修改。应用设置和菜单中的部分名称仍沿用 Traffic Lights+。
+按架构分别读取：
 
-## 第一次试用
+- `https://github.com/toriyoni/traffic-lights-glass/releases/latest/download/appcast-arm64.xml`
+- `https://github.com/toriyoni/traffic-lights-glass/releases/latest/download/appcast-x86_64.xml`
 
-先退出原版 Traffic Lights+，再打开 `build/Traffic Lights Glass.app`。在 **系统设置 → 隐私与安全性 → 辅助功能** 中允许这个新应用；新标识需要单独授权。
+每个清单指向对应版本的固定 ZIP 附件。GitHub 的 latest/download 地址只跟随正式发布的最新版本，草稿不会成为更新渠道。不依赖 GitHub Pages，也不把维护者的 GitHub 登录信息打包进应用。
 
-启用“隐藏式红绿灯”后，液态玻璃胶囊始终整组展开，内部各灯分别响应悬停。将鼠标移到原生红绿灯附近，观察整组展开，移动到三个按钮之间或胶囊内，再移开观察收起。
+`SUPublicEDKey` 为本项目独立的 Ed25519 公钥。私钥留在 macOS 登录钥匙串中，Sparkle account 为 `app.trafficlightsplus.glass.local`。`SURequireSignedFeed` 和 `SUVerifyUpdateBeforeExtraction` 开启，清单和归档都要验证。请保管并备份钥匙串；当前无 Developer ID 证书，丢失更新私钥后不能依赖 Apple 签名进行无缝密钥轮换。不要把私钥提交到仓库或写入发行附件。
 
-使用真实的系统玻璃材质，并不意味着能调用或完全复现 Apple 触屏窗口控件的私有交互。该实现仍使用辅助功能定位及独立覆盖面板；无法直接改变其他应用的原生标题栏。没有提供标准辅助功能按钮的自绘标题栏、全屏模式等限制仍受上游架构影响。
+## 准备一个版本
 
-## Mac 上需要完成的验证
+1. 修改 `Info.plist` 的显示版本和内部构建号。
+2. 写好 `docs/releases/<version>.md`，保留系统要求与已知限制。
+3. 提交并同步源码，确保工作区干净。
+4. 在持有发布钥匙串的 Mac 执行：
 
-构建脚本成功后，仍需在 Mac 上检查以下实际交互。源码包目前没有声称这些验证已经通过：
+```sh
+scripts/prepare-release.sh
+```
 
-- 在 Finder、Safari 等标准窗口，靠近任意一个灯时整组展开；跨越按钮间隙时保持展开。
-- 展开 / 收起中途反向移动鼠标，动画从当前状态继续，不突然闪回。
-- 红、黄、绿按钮分别正确执行当前设置的操作；关闭或最小化后没有覆盖面板残留。
-- 绿灯旁的固定菜单能打开，平铺、排列与全屏命令作用到正确窗口，菜单关闭后按钮状态恢复。
-- 移动窗口、切换前后台窗口、窗口相互遮挡和多显示器时，胶囊跟随正确且不会盖住无关窗口。
-- 系统“减少动态效果”“降低透明度”、深浅色模式下，界面与点击区域一致。
+脚本运行测试，分别构建 arm64 / x86_64 应用，制作 ZIP / DMG，生成带内嵌发行说明的签名清单，验证公钥、签名、包大小、版本、架构、bundle ID 和代码签名，生成 SHA256 校验文件。结果位于 `build/releases/v<version>/`。签名使用本机钥匙串，不导出私钥，也不上传任何文件。
 
-## 交给本机 Codex 继续验证
+新维护环境需要先在 Sparkle 工具中导入原发布钥匙串；生成一把新钥匙并替换公钥不会让旧用户自动信任它。普通源码构建不需要私钥，只有发布包签名需要。
 
-在该源码目录启动 Codex，可以直接给它这段任务：
+## 上传和发布
 
-> 继续当前 Traffic Lights Glass 修改。先阅读 BUILD-LIQUID-GLASS.md，并查看 Git 提交和工作区差异；若使用附带补丁的源码包，也可查看 liquid-glass.patch。保留已有改动。运行 bash Build-Liquid-Glass.command，修复真实的编译 / 测试问题，再在本机 macOS 验证整组玻璃胶囊的悬停动画、按钮行为、窗口遮挡和多显示器。保留三个灯同步展开与收起、展开后的单灯放大、连续间隙命中、独立吸附、两端同心的胶囊，固定材质画布与按钮图层、独立菜单交互、首帧原位预布局和指针光照。区分自动化测试通过与实际观察到的行为。不要发布或覆盖原版应用。
+确认本机验证完成后，为该源码提交创建并推送标签：
 
-## 源码与已执行检查
+```sh
+git tag -a v1.0.0 -m "Traffic Lights Glass 1.0.0"
+git push origin main v1.0.0
+scripts/create-release-draft.sh
+```
 
-基于上游提交 `e7b8e513fd953415b4fb7be2cb7edb133cead770` 修改。Git 仓库中可查看修改提交；另附的源码压缩包包含相对于该提交的 `liquid-glass.patch`。源码中已包含全部修改，无需再次应用补丁。
+草稿脚本校验包对应当前提交、标签、SHA256 和独立签名，并核对发布构建号递增。上传以下七个附件：两个 ZIP、两个 DMG、两个 appcast 和 `SHA256SUMS.txt`。`SOURCE_COMMIT.txt` 与本地发行说明留作构建记录。
 
-本机已完成 Swift 测试、完整发布构建和签名验证。144 项测试覆盖指针光照淡入淡出、形状裁切和边缘反光、顶部首帧及菜单透明外边距、反复展开原位预布局、固定菜单锚点、屏幕边缘、透明阴影点击穿透与动作派发、单灯连续悬停、间隙点击与跨按钮取消、两端同心、贴屏幕边缘画圈时其他灯不动、固定材质画布、外侧延伸和中间让位、胶囊的按钮包容性、吸附方向与幅度、静止指针下的稳定性、点击区域对齐、应用名单优先级、保存与迁移、退出功能隔离、按钮间距、窗口边缘、缺失按钮、整组展开、延迟收起、单调减速与终止、无超调、运动中反向、不同帧率、减少动态效果、按钮位置轨迹、实际 AppKit 视图与点击区域对齐，以及切换常显模式后释放动画定时器的状态。实际原生视图的材质截图和动画录屏见上述验证记录；它们不替代多显示器、各种第三方应用和长期运行的手动检查。
+检查 GitHub Release 草稿后发布，并确认最新清单可匿名下载、签名验证通过，再在应用内执行“检查更新…”。发布工作流只校验附件，使用只读仓库权限，不接触发布私钥或重签更新。
 
-上游许可证与署名保留在 `LICENSE`、`README.md` 中。
+## Apple 签名与公证
+
+当前环境没有 Developer ID Application 证书，首发为 ad-hoc 签名且未 Apple 公证。Sparkle 的 Ed25519 更新验证与 Gatekeeper 的首次安装信任是两件不同的事，不能把更新签名描述为 Apple 公证。
+
+有证书后，可通过 `SIGNING_IDENTITY` 传入 Developer ID 签名身份，并完成 Apple 公证及 stapling 后再生成归档、签名清单。不可在归档已签名后改动包内容。
+
+## 验证记录与设计背景
+
+- [原生玻璃高光](docs/native-glass-highlight.md)、[彩色按钮](docs/native-glass-buttons.md)、[颜色校准](docs/glass-button-color.md)
+- [缓出动画](docs/ease-out-capsule-animation.md)、[悬停精度](docs/precision-hover-capsule.md)、[指针照明](docs/pointer-light-and-interaction.md)
+- [应用名单](docs/application-rules.md)、[透明度跟随系统](docs/system-glass-transparency.md)、[菜单进入保护](docs/menu-approach-protection.md)
+
+历史记录保留当时的提交与验证边界，不代表每种第三方应用、系统版本和显示器组合均已通过人工测试。

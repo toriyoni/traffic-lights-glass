@@ -65,7 +65,7 @@ final class WindowOverlay {
     private(set) var cgWindowID: CGWindowID?
 
     private let window: AXUIElement
-    private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "window-overlay")
+    private let logger = Logger(subsystem: "app.trafficlightsplus.glass.local", category: "window-overlay")
     private var targetButtons: [WindowAction: AXUIElement] = [:]
     private var nativeCenterOffsets: [WindowAction: CGPoint] = [:]
     private var nativeFrameOffsets: [WindowAction: CGRect] = [:]
@@ -91,11 +91,11 @@ final class WindowOverlay {
     private var nativeZoomTimeout: DispatchWorkItem?
     private var nativeZoomClickCompletedAt: TimeInterval?
     private lazy var zoomAccessibilityQueue = DispatchQueue(
-        label: "app.trafficlightsplus.mac.zoom-action.\(key.pid)",
+        label: "app.trafficlightsplus.glass.local.zoom-action.\(key.pid)",
         qos: .userInitiated
     )
     private lazy var zoomMenuAccessibilityQueue = DispatchQueue(
-        label: "app.trafficlightsplus.mac.zoom-menu.\(key.pid)",
+        label: "app.trafficlightsplus.glass.local.zoom-menu.\(key.pid)",
         qos: .userInitiated
     )
     private var minimizeRequestGeneration = 0

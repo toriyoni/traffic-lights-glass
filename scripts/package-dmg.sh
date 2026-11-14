@@ -5,9 +5,9 @@ ROOT="${0:A:h:h}"
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Info.plist")
 
 for ARCH in arm64 x86_64; do
-    APP="$ROOT/.build/package-$ARCH/Traffic Lights Plus.app"
+    APP="$ROOT/.build/package-$ARCH/Traffic Lights Glass.app"
     STAGE="$ROOT/.build/dmg-root-$ARCH"
-    DMG="$ROOT/build/Traffic-Lights-Plus-$VERSION-$ARCH.dmg"
+    DMG="$ROOT/build/Traffic-Lights-Glass-$VERSION-$ARCH.dmg"
 
     mkdir -p "$ROOT/build"
     rm -f "$DMG"
@@ -15,11 +15,11 @@ for ARCH in arm64 x86_64; do
 
     rm -rf "$STAGE"
     mkdir -p "$STAGE"
-    ditto "$APP" "$STAGE/Traffic Lights Plus.app"
+    ditto "$APP" "$STAGE/Traffic Lights Glass.app"
     ln -s /Applications "$STAGE/Applications"
 
     hdiutil create \
-        -volname "Traffic Lights+ ($ARCH)" \
+        -volname "Traffic Lights Glass ($ARCH)" \
         -srcfolder "$STAGE" \
         -format UDZO \
         -ov \

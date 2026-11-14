@@ -47,7 +47,7 @@ struct CGWindowRecord {
 
 final class WindowTracker {
     private let preferences: Preferences
-    private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "window-tracker")
+    private let logger = Logger(subsystem: "app.trafficlightsplus.glass.local", category: "window-tracker")
     private var overlays: [AXWindowKey: WindowOverlay] = [:]
     private var applications: [pid_t: ObservedApplication] = [:]
     private var timer: Timer?

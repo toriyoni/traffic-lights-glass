@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let checkForUpdates = 102
         static let quit = 103
     }
-    private let logger = Logger(subsystem: "app.trafficlightsplus.mac", category: "lifecycle")
+    private let logger = Logger(subsystem: "app.trafficlightsplus.glass.local", category: "lifecycle")
     private let preferences = Preferences()
     private let updateController = UpdateController()
     private var tracker: WindowTracker?
@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func configureStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "macwindow.on.rectangle", accessibilityDescription: "Traffic Lights+")
+        item.button?.image = NSImage(systemSymbolName: "macwindow.on.rectangle", accessibilityDescription: "Traffic Lights Glass")
         item.isVisible = preferences.menuBarIconVisible
 
         let menu = NSMenu()

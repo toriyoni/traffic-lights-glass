@@ -1,8 +1,8 @@
-"settings.window.title" = "Traffic Lights+ 设置";
+"settings.window.title" = "Traffic Lights Glass 设置";
 "settings.subtitle" = "更大、更顺手的窗口控制按钮";
 "language.label" = "语言 / Language";
 "menu_bar_icon.visible" = "显示菜单栏图标";
-"menu_bar_icon.visible.help" = "隐藏后，重新打开 Traffic Lights+ 可再次进入设置";
+"menu_bar_icon.visible.help" = "隐藏后，重新打开 Traffic Lights Glass 可再次进入设置";
 "overlay.enabled" = "放大红绿灯";
 "preview.title" = "实时预览";
 "appearance.liquid_glass" = "液态玻璃";
@@ -60,7 +60,7 @@
 "accessibility.granted" = "辅助功能权限已开启";
 "accessibility.required" = "需要辅助功能权限才能控制窗口";
 "accessibility.open_settings" = "打开辅助功能设置";
-"accessibility.instructions" = "若列表中没有本应用，请点击“+”并选择 Traffic Lights Plus.app。";
+"accessibility.instructions" = "若列表中没有本应用，请点击“+”并选择 Traffic Lights Glass.app。";
 "application_list.picker.title" = "选择要单独设置的应用";
 "quit_on_close.picker.prompt" = "添加";
 "quit_on_close.error.title" = "无法添加应用";
@@ -69,7 +69,7 @@
 "menu.settings" = "设置…";
 "menu.enable_overlays" = "启用放大红绿灯";
 "menu.enable_dock_click" = "启用 Dock 栏最小化";
-"menu.quit" = "退出 Traffic Lights+";
+"menu.quit" = "退出 Traffic Lights Glass";
 
 "window_menu.title" = "窗口布局";
 "window_menu.move_resize" = "移动与调整大小";

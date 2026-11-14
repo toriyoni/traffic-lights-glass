@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Traffic Lights+ problem
+description: Report a reproducible Traffic Lights Glass problem
 title: "[Bug] "
 labels: [bug]
 body:
@@ -17,13 +17,11 @@ body:
       placeholder: Finder, Music, Safari...
     validations:
       required: true
-  - type: dropdown
-    id: style
+  - type: input
+    id: version
     attributes:
-      label: Control style
-      options:
-        - macOS circles
-        - Edge-aligned squares
+      label: Traffic Lights Glass version and chip
+      placeholder: 1.0.0, Apple Silicon / Intel
     validations:
       required: true
   - type: textarea

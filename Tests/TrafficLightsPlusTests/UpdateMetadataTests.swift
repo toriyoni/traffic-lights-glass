@@ -2,13 +2,23 @@ import Foundation
 import Testing
 @testable import TrafficLightsPlus
 
-@Test func updateMetadataEnablesChecksAndDownloadsByDefault() throws {
+@Test func releaseMetadataKeepsTheInstalledIdentityAndRequiresSignedUpdates() throws {
     let info = try sourceInfoPlist()
-    #expect(info["CFBundleShortVersionString"] as? String == "1.5.2")
-    #expect(info["CFBundleVersion"] as? String == "9")
+    #expect(info["CFBundleIdentifier"] as? String == "app.trafficlightsplus.glass.local")
+    #expect(info["CFBundleName"] as? String == "Traffic Lights Glass")
+    let version = try #require(info["CFBundleShortVersionString"] as? String)
+    #expect(version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil)
+    let build = try #require((info["CFBundleVersion"] as? String).flatMap(Int.init))
+    #expect(build > 9) // Installed development copies used upstream build 9.
+    #expect(info["SUFeedURL"] as? String == "https://github.com/toriyoni/traffic-lights-glass/releases/latest/download/appcast-arm64.xml")
+    #expect(info["SURequireSignedFeed"] as? Bool == true)
+    #expect(info["SUVerifyUpdateBeforeExtraction"] as? Bool == true)
+    #expect(info["SUSendProfileInfo"] as? Bool == false)
     #expect(info["SUEnableAutomaticChecks"] as? Bool == true)
-    #expect(info["SUAutomaticallyUpdate"] as? Bool == true)
-    #expect((info["SUPublicEDKey"] as? String)?.isEmpty == false)
+    #expect(info["SUAutomaticallyUpdate"] as? Bool == false)
+    let publicKey = try #require(info["SUPublicEDKey"] as? String)
+    #expect(Data(base64Encoded: publicKey)?.count == 32)
+    #expect(publicKey != "eiz9SZ4C/0cljdNMa0/7yweFUbXH+vUTHOoI71DHwrg=")
 }
 
 @Test func softwareUpdateCopyIsLocalizedInBothLanguages() {
