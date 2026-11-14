@@ -106,10 +106,10 @@ struct SettingsView: View {
                             .frame(height: 1)
                     }
                 previewButtons
-                    .padding(.leading, preferences.style == .edgeSquares ? 0 : 12)
-                    .padding(.top, preferences.style == .edgeSquares ? 0 : 8)
+                    .padding(.leading, 12)
+                    .padding(.top, 8)
             }
-            .frame(height: max(64, CGFloat(preferences.size) + (preferences.style == .liquidGlass ? 32 : 16)))
+            .frame(height: max(64, CGFloat(preferences.size) + 32))
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .overlay {
                 RoundedRectangle(cornerRadius: 7)
@@ -121,14 +121,10 @@ struct SettingsView: View {
     @ViewBuilder
     private var previewButtons: some View {
         let size = CGFloat(preferences.size)
-        let spacing: CGFloat = preferences.style == .edgeSquares
-            ? 0
-            : (preferences.style == .liquidGlass ? 8 : max(-size + 4, 8 + CGFloat(preferences.spacing)))
-        let buttons = HStack(spacing: spacing) {
+        let buttons = HStack(spacing: 8) {
             PreviewControl(
                 action: .close,
                 behavior: preferences.closeBehavior,
-                style: preferences.style,
                 size: size,
                 language: preferences.language
             )
@@ -136,7 +132,6 @@ struct SettingsView: View {
             PreviewControl(
                 action: .minimize,
                 behavior: preferences.minimizeBehavior,
-                style: preferences.style,
                 size: size,
                 language: preferences.language
             )
@@ -144,27 +139,24 @@ struct SettingsView: View {
             PreviewControl(
                 action: .zoom,
                 behavior: preferences.zoomBehavior,
-                style: preferences.style,
                 size: size,
                 language: preferences.language
             )
                 .frame(width: size, height: size)
         }
-        .padding(preferences.style == .liquidGlass ? 8 : 0)
+        .padding(8)
 
         let fallback = buttons.background {
-            if preferences.style == .liquidGlass {
-                Capsule()
-                    .fill(.regularMaterial)
-                    .overlay {
-                        Capsule().strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
-                    }
-            }
+            Capsule()
+                .fill(.regularMaterial)
+                .overlay {
+                    Capsule().strokeBorder(Color.white.opacity(0.32), lineWidth: 1)
+                }
         }
 
         #if compiler(>=6.2)
-        if #available(macOS 26.0, *), preferences.style == .liquidGlass {
-            buttons.glassEffect(.regular, in: Capsule())
+        if #available(macOS 26.0, *) {
+            buttons.background { Color.clear.glassEffect(.regular, in: Capsule()) }
         } else {
             fallback
         }
@@ -176,28 +168,19 @@ struct SettingsView: View {
     private var controls: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(localized(.appearance))
+                Text(localized(.appearanceLiquidGlass))
                     .font(.headline)
-                Picker(localized(.appearance), selection: $preferences.style) {
-                    ForEach(ControlStyle.allCases, id: \.self) { style in
-                        Text(style.title(language: preferences.language)).tag(style)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                if preferences.style == .liquidGlass {
-                    Text(localized(.liquidGlassHelp))
+                Text(localized(.liquidGlassHelp))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if #available(macOS 26.1, *) {
+                    Toggle(localized(.followSystemGlassTransparency), isOn: $preferences.followSystemGlassTransparency)
+                        .toggleStyle(.switch)
+                    Text(localized(.followSystemGlassTransparencyHelp))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    if #available(macOS 26.1, *) {
-                        Toggle(localized(.followSystemGlassTransparency), isOn: $preferences.followSystemGlassTransparency)
-                            .toggleStyle(.switch)
-                        Text(localized(.followSystemGlassTransparencyHelp))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
             }
 
@@ -225,54 +208,13 @@ struct SettingsView: View {
                 }
             }
 
-            if preferences.style == .macOS {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(localized(.buttonSpacing))
-                            .font(.headline)
-                        Spacer()
-                        Text(spacingDescription)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        Button(localized(.restoreSystemSpacing)) {
-                            preferences.spacing = ControlLayout.defaultSpacingAdjustment
-                        }
-                            .buttonStyle(.link)
-                    }
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.left.and.right")
-                            .foregroundStyle(.secondary)
-                        Slider(
-                            value: $preferences.spacing,
-                            in: ControlLayout.spacingAdjustmentRange,
-                            step: 1
-                        )
-                        .accessibilityLabel(localized(.buttonSpacing))
-                        .accessibilityValue(spacingDescription)
-                        Image(systemName: "arrow.left.and.right")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
             Toggle(localized(.hiddenTrafficLights), isOn: $preferences.hiddenTrafficLightsEnabled)
 
             if preferences.hiddenTrafficLightsEnabled {
-                if preferences.style == .liquidGlass {
-                    Text(localized(.glassGroupRevealHelp))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Picker(localized(.revealMode), selection: $preferences.hiddenTrafficLightRevealMode) {
-                        ForEach(HiddenTrafficLightRevealMode.allCases, id: \.self) { mode in
-                            Text(mode.title(language: preferences.language)).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
+                Text(localized(.glassGroupRevealHelp))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Toggle(localized(.fullScreenInDevelopment), isOn: .constant(false))
@@ -328,7 +270,6 @@ struct SettingsView: View {
                     selection: $preferences.zoomBehavior
                 )
             }
-
         }
     }
 
@@ -487,12 +428,6 @@ struct SettingsView: View {
         }
     }
 
-    private var spacingDescription: String {
-        let spacing = Int(preferences.spacing)
-        if spacing == 0 { return localized(.systemSpacing) }
-        return spacing > 0 ? "+\(spacing) pt" : "\(spacing) pt"
-    }
-
     private func behaviorRow(
         title: String,
         color: Color,
@@ -622,7 +557,6 @@ struct SettingsView: View {
 private struct PreviewControl: NSViewRepresentable {
     let action: WindowAction
     let behavior: ButtonBehavior
-    let style: ControlStyle
     let size: CGFloat
     let language: AppLanguage
 
@@ -631,7 +565,6 @@ private struct PreviewControl: NSViewRepresentable {
     }
 
     func updateNSView(_ view: OverlayButtonView, context: Context) {
-        view.style = style
         view.controlSize = size
         view.language = language
         view.behavior = behavior

@@ -406,8 +406,7 @@ final class WindowTracker {
     }
 
     private func handlePointerMovement() {
-        guard preferences.hasEnabledOverlays,
-              preferences.hiddenTrafficLightsEnabled || preferences.style == .liquidGlass else { return }
+        guard preferences.hasEnabledOverlays else { return }
         let location = NSEvent.mouseLocation
         guard overlays.values.contains(where: {
             preferences.overlaysEnabled(bundleIdentifier: $0.bundleIdentifier) && $0.needsPointerUpdate(at: location)

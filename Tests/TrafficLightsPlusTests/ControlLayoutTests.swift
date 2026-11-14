@@ -258,35 +258,9 @@ import Testing
     ) == [.minimize])
 }
 
-@Test func macOSFramesHaveDraggableGaps() throws {
-    let frames = ControlLayout.frames(
-        style: .macOS,
-        controlSize: 28,
-        windowOrigin: CGPoint(x: 100, y: 50),
-        windowSize: CGSize(width: 900, height: 600)
-    )
 
-    #expect(frames[.close] == CGRect(x: 112, y: 54, width: 28, height: 28))
-    #expect(frames[.minimize] == CGRect(x: 148, y: 54, width: 28, height: 28))
-    #expect(frames[.zoom] == CGRect(x: 184, y: 54, width: 28, height: 28))
-}
 
-@Test func squareFramesTouchWindowEdgesAndEachOther() throws {
-    let frames = ControlLayout.frames(
-        style: .edgeSquares,
-        controlSize: 32,
-        windowOrigin: CGPoint(x: 100, y: 50),
-        windowSize: CGSize(width: 900, height: 600)
-    )
-
-    #expect(frames[.close] == CGRect(x: 100, y: 50, width: 32, height: 32))
-    #expect(frames[.minimize] == CGRect(x: 132, y: 50, width: 32, height: 32))
-    #expect(frames[.zoom] == CGRect(x: 164, y: 50, width: 32, height: 32))
-}
-
-@Test func onlyLeftSideStylesAreExposed() {
-    #expect(ControlStyle.allCases == [.liquidGlass, .macOS, .edgeSquares])
-    #expect(ControlLayout.displayOrder(for: .liquidGlass) == [.close, .minimize, .zoom])
-    #expect(ControlLayout.displayOrder(for: .macOS) == [.close, .minimize, .zoom])
-    #expect(ControlLayout.displayOrder(for: .edgeSquares) == [.close, .minimize, .zoom])
+@Test func onlyLiquidGlassAppearanceRemains() {
+    #expect(ControlStyle.allCases == [.liquidGlass])
+    #expect(ControlLayout.displayOrder == [.close, .minimize, .zoom])
 }

@@ -71,9 +71,9 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 - 红绿灯尺寸可在 `18-48 pt` 范围内调整。
 - 液态玻璃模式只放大当前悬停的灯，并轻微向指针吸附；三个灯之间可连续滑动和点击，胶囊两端与红绿灯同心，其他灯保持稳定。胶囊和灯面带有随指针移动的柔光与局部边缘反光，菜单与灯的交互独立。见[交互效果](docs/pointer-light-and-interaction.md)。
 - 液态玻璃提供“透明度跟随系统”开关：默认跟随系统外观中的 Liquid Glass，关闭后固定为清透效果。见[透明度与菜单验证](docs/system-glass-transparency.md)。
-- 圆形按钮支持自定义间距，也可切换为左上角贴边方块。
-- “隐藏式红绿灯”支持靠近时放大“整组”或仅放大“单个”最近按钮。
-- 在当前活跃窗口中悬停配置为“缩放窗口”的绿灯，可打开固定在绿灯旁的玻璃菜单；移入菜单可操作，移到其他灯或外部立即关闭，调用系统平铺、排列及全屏操作。见[菜单定位与验证](docs/anchored-window-menu.md)。
+- 仅保留液态玻璃外观；旧版圆形、贴边方块配置自动迁移，其他设置保留。
+- “隐藏式红绿灯”在靠近时展开整组胶囊，内部按钮分别响应悬停。
+- 在当前活跃窗口中悬停配置为“缩放窗口”的绿灯，可打开固定在绿灯旁的玻璃菜单；斜向移入菜单有短暂保护、菜单边缘有少量容错，移到其他灯或转向外部立即关闭，调用系统平铺、排列及全屏操作。见[菜单定位与验证](docs/anchored-window-menu.md)。
 - 窗口位置通过系统通知更新；隐藏式红绿灯由鼠标接近触发，仅在展开、收起期间刷新动画，避免持续高频追踪。
 - 最小化前快速缩小并隐藏覆盖按钮，避免覆盖层留在系统动画中。
 - 再次点击当前前台应用的 Dock 图标时，可最小化该应用的当前窗口。
@@ -105,8 +105,8 @@ Traffic Lights+ 是一个原生 macOS 菜单栏工具，可以把其他应用窗
 
 Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
 
-- 放大红绿灯开关、尺寸、外观和圆形按钮间距；
-- 隐藏式红绿灯及“整组/单个”放大方式；
+- 放大红绿灯开关、尺寸及液态玻璃透明度；
+- 隐藏式红绿灯开关；
 - 红、黄、绿三个按钮各自的操作；
 - 独立的“关闭时退出应用”开关和应用名单，关闭放大红绿灯后仍然生效；
 - “在全屏窗口中显示（开发中）”当前不可勾选。
@@ -116,7 +116,7 @@ Traffic Lights+ 启动后常驻菜单栏。设置页可以调整：
 - “显示菜单栏图标”可单独关闭；隐藏图标后可重新打开应用进入设置。
 - “软件更新”可分别控制自动检查、自动下载，也可立即手动检查。
 
-隐藏模式开启时，将鼠标移到窗口左上角红绿灯区域即可显示放大按钮。单个模式会选择距离鼠标最近的可见按钮，按钮被其他窗口遮挡时不会显示或参与选择。
+隐藏模式开启时，将鼠标移到窗口左上角红绿灯区域即可显示放大按钮。按钮被其他窗口遮挡时不会显示或参与选择。
 
 ### 已知限制
 
@@ -219,9 +219,9 @@ Public builds currently use ad-hoc code signing and are not notarized by Apple. 
 ### Features
 
 - Adjustable traffic-light control size from `18-48 pt`.
-- Custom spacing for circular controls, with an optional left-edge square style.
-- Hidden traffic lights can reveal the entire group or only the nearest individual control.
-- Hover over the green button configured to zoom the active window to open its anchored glass menu. Moving into the menu keeps it clickable; moving to another light or outside closes it immediately.
+- Liquid Glass is the only appearance; retired circular/square selections migrate while other preferences are preserved.
+- Hidden traffic lights reveal the capsule as a group, with independent hover feedback for each light.
+- Hover over the green button configured to zoom the active window to open its anchored glass menu. Directional entry protection and small edge tolerance make the menu easier to reach. These regions pass clicks through; moving to another light or away closes the menu.
 - Follow System Glass Transparency defaults to on. Turning it off keeps this app clear independently of the system Liquid Glass setting. See [validation and compatibility details](docs/system-glass-transparency.md).
 - Window positions update through system notifications. Hidden traffic lights react to pointer proximity and refresh animations only while expanding or collapsing, without continuous high-frequency tracking.
 - Overlay controls quickly shrink and disappear before minimization to avoid remaining visible during the system animation.
@@ -254,8 +254,8 @@ Accessibility permission is used only to discover standard window controls, read
 
 Traffic Lights+ remains available in the menu bar after launch. Its settings include:
 
-- the enlarged-traffic-light switch, control size, appearance, and circular-control spacing;
-- hidden traffic lights and group/single reveal modes;
+- the enlarged-traffic-light switch, control size, and Liquid Glass transparency;
+- the hidden-traffic-lights switch;
 - independent actions for the red, yellow, and green controls;
 - an independent quit-on-close switch and application list that also work with enlarged traffic lights disabled;
 - a disabled **Show in full-screen windows (In development)** option.
@@ -265,7 +265,7 @@ Traffic Lights+ remains available in the menu bar after launch. Its settings inc
 - a **Show Menu Bar Icon** toggle; reopen the app to access Settings after hiding it.
 - a **Software Updates** section for automatic checks, automatic downloads, and immediate manual checks.
 
-When hidden mode is enabled, move the pointer into the traffic-light area in the top-left corner of a window to reveal the enlarged controls. Single mode selects the nearest visible control. Controls covered by another window are neither displayed nor included in selection.
+When hidden mode is enabled, move the pointer into the traffic-light area in the top-left corner of a window to reveal the enlarged controls. Controls covered by another window are neither displayed nor included in selection.
 
 ### Known Limitations
 

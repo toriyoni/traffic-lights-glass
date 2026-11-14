@@ -18,7 +18,6 @@ final class OverlayButtonView: NSView {
     var language: AppLanguage = .simplifiedChinese {
         didSet { if language != oldValue { updateLocalizedMetadata() } }
     }
-    var style: ControlStyle = .macOS { didSet { if style != oldValue { refreshAppearance() } } }
     var controlSize: CGFloat = 28 { didSet { if controlSize != oldValue { needsDisplay = true } } }
     var isControlEnabled = true { didSet { if isControlEnabled != oldValue { refreshAppearance() } } }
     var isWindowActive = false { didSet { if isWindowActive != oldValue { refreshAppearance() } } }
@@ -84,6 +83,7 @@ final class OverlayButtonView: NSView {
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
             object: nil
         )
+        refreshAppearance()
     }
 
     @available(*, unavailable)
@@ -111,7 +111,7 @@ final class OverlayButtonView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        style == .liquidGlass || super.acceptsFirstMouse(for: event)
+        true
     }
 
     override func updateTrackingAreas() {
@@ -161,42 +161,7 @@ final class OverlayButtonView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let rect = bounds
-        if style == .liquidGlass {
-            if glassSurface == nil { drawGlassFallback(in: rect) }
-            return
-        }
-        let actionColor = color(for: action)
-        let idleColor = inactiveControlColor()
-        let fillColor: NSColor
-
-        if !isControlEnabled {
-            fillColor = idleColor
-        } else if isPressed {
-            fillColor = actionColor.blended(withFraction: 0.24, of: .black) ?? actionColor
-        } else if isHovered {
-            fillColor = actionColor.blended(withFraction: 0.10, of: .black) ?? actionColor
-        } else if isWindowActive || isGroupHovered {
-            fillColor = actionColor
-        } else {
-            fillColor = idleColor
-        }
-
-        let path = style == .macOS
-            ? NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
-            : edgeSquarePath(in: rect)
-        fillColor.setFill()
-        path.fill()
-
-        if style == .macOS {
-            NSColor.black.withAlphaComponent(0.16).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        }
-
-        if style != .macOS || isPointerHighlightVisible {
-            drawSymbol(in: rect)
-        }
+        if glassSurface == nil { drawGlassFallback(in: bounds) }
     }
 
     @objc private func accessibilityAppearanceDidChange(_ notification: Notification) {
@@ -210,7 +175,7 @@ final class OverlayButtonView: NSView {
     private func refreshAppearance() {
         #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
-            if style == .liquidGlass && !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
                 let glass: GlassControlMaterialView
                 if let existing = glassSurface as? GlassControlMaterialView {
                     glass = existing
@@ -339,29 +304,6 @@ final class OverlayButtonView: NSView {
         setAccessibilityLabel(title)
     }
 
-    private func edgeSquarePath(in rect: NSRect) -> NSBezierPath {
-        let radius = min(8, rect.height * 0.22)
-        let path = NSBezierPath()
-
-        switch action {
-        case .close:
-            path.move(to: NSPoint(x: rect.minX + radius, y: rect.minY))
-            path.line(to: NSPoint(x: rect.maxX, y: rect.minY))
-            path.line(to: NSPoint(x: rect.maxX, y: rect.maxY))
-            path.line(to: NSPoint(x: rect.minX, y: rect.maxY))
-            path.line(to: NSPoint(x: rect.minX, y: rect.minY + radius))
-            path.curve(
-                to: NSPoint(x: rect.minX + radius, y: rect.minY),
-                controlPoint1: NSPoint(x: rect.minX, y: rect.minY + radius * 0.45),
-                controlPoint2: NSPoint(x: rect.minX + radius * 0.45, y: rect.minY)
-            )
-        case .minimize, .zoom:
-            path.appendRect(rect)
-        }
-        path.close()
-        return path
-    }
-
     private func color(for action: WindowAction) -> NSColor {
         switch action {
         case .close:
@@ -384,15 +326,13 @@ final class OverlayButtonView: NSView {
     }
 
     private func drawSymbol(in rect: NSRect) {
-        guard let symbolRect = Self.symbolRect(in: rect, style: style) else { return }
+        guard let symbolRect = Self.symbolRect(in: rect) else { return }
         let visualSize = min(rect.width, rect.height)
         let path = NSBezierPath()
         path.lineWidth = max(1.0, visualSize * 0.055)
         path.lineCapStyle = .round
 
-        let symbolColor = style == .liquidGlass
-            ? NSColor.black.withAlphaComponent(isControlEnabled ? 0.76 : 0.32)
-            : NSColor.labelColor.withAlphaComponent(isControlEnabled ? 0.82 : 0.36)
+        let symbolColor = NSColor.black.withAlphaComponent(isControlEnabled ? 0.76 : 0.32)
         symbolColor.setStroke()
 
         switch behavior {
@@ -405,35 +345,32 @@ final class OverlayButtonView: NSView {
             path.move(to: NSPoint(x: symbolRect.minX, y: symbolRect.midY))
             path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.midY))
         case .zoomWindow:
-            if style == .liquidGlass {
-                // Two outward arrowheads, matching the native fullscreen
-                // affordance; keep legacy styles' drawing unchanged.
-                let length = min(symbolRect.width, symbolRect.height) * 0.59
-                path.move(to: NSPoint(x: symbolRect.maxX - length, y: symbolRect.minY))
-                path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY))
-                path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY + length))
-                path.close()
-                path.move(to: NSPoint(x: symbolRect.minX + length, y: symbolRect.maxY))
-                path.line(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY))
-                path.line(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY - length))
-                path.close()
-                symbolColor.setFill()
-                path.fill()
-                return
-            }
-            path.move(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY))
+            // Two outward arrowheads, matching the native fullscreen
+            // affordance.
+            let length = min(symbolRect.width, symbolRect.height) * 0.59
+            path.move(to: NSPoint(x: symbolRect.maxX - length, y: symbolRect.minY))
             path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY))
+            path.line(to: NSPoint(x: symbolRect.maxX, y: symbolRect.minY + length))
+            path.close()
+            path.move(to: NSPoint(x: symbolRect.minX + length, y: symbolRect.maxY))
+            path.line(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY))
+            path.line(to: NSPoint(x: symbolRect.minX, y: symbolRect.maxY - length))
+            path.close()
+            symbolColor.setFill()
+            path.fill()
+            return
+
         case .doNothing:
             return
         }
         path.stroke()
     }
 
-    static func symbolRect(in rect: NSRect, style: ControlStyle) -> NSRect? {
+    static func symbolRect(in rect: NSRect) -> NSRect? {
         let visualSize = min(rect.width, rect.height)
         guard visualSize.isFinite, visualSize > 2,
               rect.minX.isFinite, rect.minY.isFinite else { return nil }
-        let inset = visualSize * (style == .macOS ? 0.31 : 0.32)
+        let inset = visualSize * 0.32
         let symbolRect = rect.insetBy(dx: inset, dy: inset)
         guard !symbolRect.isNull,
               symbolRect.minX.isFinite, symbolRect.minY.isFinite,
@@ -472,30 +409,3 @@ private final class GlassControlSymbolView: NSView {
     }
 }
 #endif
-
-final class OverlayPanel: NSPanel {
-    let overlayView: OverlayButtonView
-
-    init(action: WindowAction) {
-        overlayView = OverlayButtonView(action: action)
-        super.init(
-            contentRect: .zero,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        contentView = overlayView
-        overlayView.frame = contentView?.bounds ?? .zero
-        overlayView.autoresizingMask = [.width, .height]
-        backgroundColor = .clear
-        isOpaque = false
-        hasShadow = false
-        level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        hidesOnDeactivate = false
-        becomesKeyOnlyIfNeeded = true
-        acceptsMouseMovedEvents = true
-        isReleasedWhenClosed = false
-        animationBehavior = .none
-    }
-}

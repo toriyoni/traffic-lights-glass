@@ -1,0 +1,10 @@
+PASS only one grouped overlay window remains; no retired style panels
+PASS red/yellow dwell never opens the window menu
+PASS leaving green before the hover delay cancels the pending menu
+PASS delayed callback rechecks the live pointer, without another hover event
+PASS diagonal approach outside the old arrow corridor is protected and passes clicks through
+PASS protected approach reaches the menu edge without a corner gap
+PASS entering menu cancels approach expiry, stays clickable and preserves the anchor
+PASS small menu-edge excursion is tolerated without capturing clicks outside the shape
+PASS moving to yellow closes synchronously; yellow magnification stays responsive
+PASS menu reopens after a fresh green dwell and closes immediately outside

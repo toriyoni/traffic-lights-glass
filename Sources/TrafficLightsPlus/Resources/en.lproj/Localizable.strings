@@ -11,8 +11,6 @@
 "appearance.liquid_glass.follow_system_transparency.help" = "When on, follows System Settings → Appearance → Liquid Glass. When off, this app keeps a clear appearance. Reduce Transparency remains respected.";
 "hidden_traffic_lights.glass_group.help" = "Approach the traffic lights to reveal the group. The closer the pointer is to a button, the larger it grows. Move away to shrink and hide the group smoothly.";
 "appearance.title" = "Appearance";
-"appearance.macos" = "macOS Circles";
-"appearance.edge_squares" = "Left-Aligned Squares";
 "button.size" = "Button Size";
 "button.restore_default" = "Reset";
 "button.spacing" = "Button Spacing";

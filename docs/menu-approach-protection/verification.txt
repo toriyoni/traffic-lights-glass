@@ -1,0 +1,10 @@
+Verified 2026-11-14 on macOS 27.2.1 with macOS 26.5 SDK.
+144 Swift tests passed. Release build and strict deep signature verification passed.
+Native fixture: 10 checks passed; see native-window-checks.txt.
+Installed executable SHA256: 53e11c90f41d050b1a5a02852963b6a41b2c944dd58acce3d8d7b54d9ce79bb8
+Settings UI inspected after installation: no circular/square appearance picker;
+Liquid Glass and the follow-system transparency switch are present. The preview
+shows three colored glass buttons. Existing preferences are semantically identical
+to the backup, including the 25 pt size and disabled UU Remote override.
+Only the installed application process is running. This verification covers this
+Mac and controlled fixture input; subjective interaction feel remains user-tested.

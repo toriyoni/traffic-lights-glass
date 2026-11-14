@@ -30,32 +30,119 @@ import Testing
     }
 }
 
-@Test func menuRetentionExcludesOtherLightsAndEmptySpace() {
+@Test func menuApproachProtectionHandlesBothDirectionsAndClampedMenus() {
     let screen = CGRect(x: 0, y: 0, width: 1512, height: 949)
-    for y: CGFloat in [650, 20] {
-        let green = CGRect(x: 500, y: y, width: 33, height: 33)
-        let p = ZoomMenuPlacement(anchor: green, visibleScreen: screen)
-        #expect(p.containsInteraction(CGPoint(x: green.midX, y: green.midY), source: green))
-        #expect(p.containsInteraction(CGPoint(x: p.frame.midX, y: p.frame.midY), source: green))
-        let crossingY = p.belowAnchor ? green.minY - 1 : green.maxY + 1
-        #expect(p.containsInteraction(CGPoint(x: green.midX, y: crossingY), source: green))
-        #expect(!p.containsInteraction(CGPoint(x: green.midX - 31, y: green.midY), source: green))
-        #expect(!p.containsInteraction(CGPoint(x: green.midX - 62, y: green.midY), source: green))
-        #expect(!p.containsInteraction(CGPoint(x: green.maxX + 5, y: green.midY), source: green))
-        #expect(!p.containsInteraction(CGPoint(x: p.frame.minX + 1, y: crossingY), source: green))
-    }
-    // A clamped menu must not turn the red/yellow controls into a retention
-    // corridor when its body extends to the left of the green light.
-    let green = CGRect(x: screen.maxX - 40, y: 650, width: 33, height: 33)
-    let placement = ZoomMenuPlacement(anchor: green, visibleScreen: screen)
-    let corner = CGPoint(x: green.minX + 1, y: green.maxY - 1)
-    #expect(!placement.containsInteraction(corner, source: green))
-    #expect(placement.containsInteraction(corner, source: green, sourceIsCircular: false))
-    for offset: CGFloat in [-31, -62] {
-        for dy: CGFloat in [-10, 0, 10] {
-            #expect(!placement.containsInteraction(CGPoint(x: green.midX + offset, y: green.midY + dy), source: green))
+    for x: CGFloat in [500, 1472] {
+        for y: CGFloat in [650, 20] {
+            let green = CGRect(x: x, y: y, width: 33, height: 33)
+            let p = ZoomMenuPlacement(anchor: green, visibleScreen: screen)
+            let center = CGPoint(x: green.midX, y: green.midY)
+            var state = ZoomMenuHoverProtection()
+            state.reset(at: center)
+            let retained1 = state.retain(at: center, source: green, placement: p, overOtherControl: false, now: 0)
+            #expect(retained1)
+            let direction: CGFloat = p.belowAnchor ? -1 : 1
+            let edgeY = p.belowAnchor ? green.minY : green.maxY
+            let diagonal = CGPoint(x: x == 500 ? green.maxX + 15 : green.minX - 15, y: edgeY + direction)
+            #expect(!p.containsMenu(diagonal))
+            #expect(!GlassGroupLayout.contains(diagonal, in: green))
+            let retained2 = state.retain(at: diagonal, source: green.insetBy(dx: 3, dy: 3), placement: p, overOtherControl: false, now: 0.02)
+            #expect(retained2)
+            #expect(state.deadline != nil)
+            // The menu's rounded edge must not cut off the protected approach
+            // just before the pointer enters its visible pixels.
+            let cornerApproach = CGPoint(x: p.frame.maxX + 3, y: p.frame.midY)
+            let nearEdge = state.retain(at: cornerApproach, source: green, placement: p, overOtherControl: false, now: 0.08)
+            #expect(nearEdge)
+            let retained3 = state.retain(at: CGPoint(x: p.frame.midX, y: p.frame.midY), source: green, placement: p, overOtherControl: false, now: 0.10)
+            #expect(retained3)
+            #expect(state.deadline == nil)
+            for offset: CGFloat in [-31, -62] {
+                let retained4 = state.retain(at: CGPoint(x: green.midX + offset, y: green.midY - 10), source: green, placement: p, overOtherControl: true, now: 0.11)
+                #expect(!retained4)
+            }
         }
     }
+}
+
+@Test func menuApproachExpiresAndTurningAwayClosesImmediately() {
+    let green = CGRect(x: 500, y: 650, width: 33, height: 33)
+    let p = ZoomMenuPlacement(anchor: green, visibleScreen: CGRect(x: 0, y: 0, width: 1512, height: 949))
+    let center = CGPoint(x: green.midX, y: green.midY)
+    let diagonal = CGPoint(x: green.maxX + 15, y: green.minY - 1)
+    var state = ZoomMenuHoverProtection()
+    state.reset(at: center)
+    let retained5 = state.retain(at: diagonal, source: green, placement: p, overOtherControl: false, now: 0)
+    #expect(retained5)
+    let retained6 = state.retain(at: diagonal, source: green, placement: p, overOtherControl: false, now: 0.2)
+    #expect(retained6)
+    let retained7 = state.retain(at: diagonal, source: green, placement: p, overOtherControl: false, now: 0.36)
+    #expect(!retained7)
+    state.reset(at: center)
+    let retained8 = state.retain(at: diagonal, source: green, placement: p, overOtherControl: false, now: 1)
+    #expect(retained8)
+    let retained9 = state.retain(at: CGPoint(x: diagonal.x, y: diagonal.y + 5), source: green, placement: p, overOtherControl: false, now: 1.01)
+    #expect(!retained9)
+    state.reset(at: center)
+    let retained10 = state.retain(at: CGPoint(x: green.maxX + 15, y: center.y), source: green, placement: p, overOtherControl: false, now: 2)
+    #expect(!retained10)
+}
+
+@Test func menuEdgeToleranceIsSmallAndDoesNotRenewIndefinitely() {
+    let green = CGRect(x: 500, y: 650, width: 33, height: 33)
+    let p = ZoomMenuPlacement(anchor: green, visibleScreen: CGRect(x: 0, y: 0, width: 1512, height: 949))
+    let inside = CGPoint(x: p.frame.midX, y: p.frame.midY)
+    let edge = CGPoint(x: p.frame.minX - 4, y: p.frame.midY)
+    var state = ZoomMenuHoverProtection()
+    let retained11 = state.retain(at: inside, source: green, placement: p, overOtherControl: false, now: 0)
+    #expect(retained11)
+    let retained12 = state.retain(at: edge, source: green, placement: p, overOtherControl: false, now: 0.01)
+    #expect(retained12)
+    let retained13 = state.retain(at: edge, source: green, placement: p, overOtherControl: false, now: 0.1)
+    #expect(retained13)
+    let retained14 = state.retain(at: edge, source: green, placement: p, overOtherControl: false, now: 0.2)
+    #expect(!retained14)
+    let retained15 = state.retain(at: inside, source: green, placement: p, overOtherControl: false, now: 1)
+    #expect(retained15)
+    let retained16 = state.retain(at: CGPoint(x: edge.x - 4, y: edge.y), source: green, placement: p, overOtherControl: false, now: 1.01)
+    #expect(!retained16)
+}
+
+@MainActor
+@Test func protectionNeverExpandsTheClickableMenuAndClosesIfThePointerStops() async throws {
+    let green = CGRect(x: 500, y: 650, width: 33, height: 33)
+    var pointer = CGPoint(x: green.midX, y: green.midY)
+    let menu = ZoomMenuPanel(anchor: green, visibleScreen: CGRect(x: 0, y: 0, width: 1512, height: 949),
+        snapshot: WindowMenuSnapshot(enabled: [.fill], isFullScreen: false), language: .english, appearance: nil)
+    menu.pointerLocation = { pointer }
+    defer { menu.dismiss() }
+    menu.present()
+    pointer = CGPoint(x: green.maxX + 15, y: green.minY - 1)
+    menu.updatePointerLocation(pointer)
+    #expect(menu.isVisible)
+    #expect(menu.ignoresMouseEvents && !menu.receivesMouse(at: pointer))
+    try await Task.sleep(nanoseconds: 430_000_000)
+    #expect(!menu.isVisible)
+}
+
+@MainActor
+@Test func enteringTheMenuCancelsTheProtectionExpiry() async throws {
+    let green = CGRect(x: 500, y: 650, width: 33, height: 33)
+    var pointer = CGPoint(x: green.midX, y: green.midY)
+    let menu = ZoomMenuPanel(anchor: green, visibleScreen: CGRect(x: 0, y: 0, width: 1512, height: 949),
+        snapshot: WindowMenuSnapshot(enabled: [.fill], isFullScreen: false), language: .english, appearance: nil)
+    menu.pointerLocation = { pointer }
+    defer { menu.dismiss() }
+    menu.present()
+    pointer = CGPoint(x: green.maxX + 15, y: green.minY - 1)
+    menu.updatePointerLocation(pointer)
+    pointer = CGPoint(x: menu.placement.frame.midX, y: menu.placement.frame.midY)
+    menu.updatePointerLocation(pointer)
+    try await Task.sleep(nanoseconds: 430_000_000)
+    #expect(menu.isVisible && !menu.ignoresMouseEvents)
+    menu.otherControlsContain = { _ in true }
+    menu.updatePointerLocation(pointer)
+    #expect(!menu.isVisible)
 }
 
 @MainActor

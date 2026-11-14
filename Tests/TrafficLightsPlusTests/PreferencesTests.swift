@@ -200,7 +200,6 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         preferences.enabled = false
         preferences.size = 42
         preferences.spacing = 12
-        preferences.style = .edgeSquares
         preferences.hiddenTrafficLightsEnabled = false
         preferences.hiddenTrafficLightRevealMode = .group
         preferences.dockClickMinimizesActiveWindow = false
@@ -220,7 +219,7 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
         #expect(!restored.enabled)
         #expect(restored.size == 42)
         #expect(restored.spacing == 12)
-        #expect(restored.style == .edgeSquares)
+        #expect(restored.style == .liquidGlass)
         #expect(!restored.hiddenTrafficLightsEnabled)
         #expect(restored.hiddenTrafficLightRevealMode == .group)
         #expect(!restored.showInFullScreen)
@@ -379,29 +378,21 @@ private func withDefaults(_ body: (UserDefaults) throws -> Void) rethrows {
     }
 }
 
-@Test func glassStylePreservesStoredClassicPreferences() {
-    withDefaults { defaults in
-        defaults.set(ControlStyle.macOS.rawValue, forKey: "controlStyle")
-        defaults.set(HiddenTrafficLightRevealMode.nearest.rawValue, forKey: "hiddenTrafficLightRevealMode")
-        defaults.set(36.0, forKey: "controlSize")
-        defaults.set(false, forKey: "dockClickMinimizesActiveWindow")
-
-        let preferences = Preferences(defaults: defaults)
-        #expect(preferences.style == .macOS)
-        #expect(preferences.hiddenTrafficLightRevealMode == .nearest)
-        #expect(preferences.effectiveHiddenTrafficLightRevealMode == .nearest)
-        #expect(preferences.size == 36)
-        #expect(!preferences.dockClickMinimizesActiveWindow)
-
-        preferences.style = .liquidGlass
-        #expect(preferences.effectiveHiddenTrafficLightRevealMode == .group)
-        #expect(preferences.hiddenTrafficLightRevealMode == .nearest)
-        #expect(defaults.string(forKey: "hiddenTrafficLightRevealMode") == "nearest")
-
-        let restored = Preferences(defaults: defaults)
-        #expect(restored.style == .liquidGlass)
-        #expect(restored.effectiveHiddenTrafficLightRevealMode == .group)
-        restored.style = .macOS
-        #expect(restored.effectiveHiddenTrafficLightRevealMode == .nearest)
+@Test func retiredAppearancesMigrateWithoutChangingOtherPreferences() {
+    for oldStyle in ["macOS", "edgeSquares", "liquidGlass", "unknown"] {
+        withDefaults { defaults in
+            defaults.set(oldStyle, forKey: "controlStyle")
+            defaults.set(HiddenTrafficLightRevealMode.nearest.rawValue, forKey: "hiddenTrafficLightRevealMode")
+            defaults.set(36.0, forKey: "controlSize")
+            defaults.set(false, forKey: "dockClickMinimizesActiveWindow")
+            let preferences = Preferences(defaults: defaults)
+            #expect(preferences.style == .liquidGlass)
+            #expect(defaults.string(forKey: "controlStyle") == "liquidGlass")
+            #expect(preferences.effectiveHiddenTrafficLightRevealMode == .group)
+            #expect(preferences.hiddenTrafficLightRevealMode == .nearest)
+            #expect(preferences.size == 36)
+            #expect(!preferences.dockClickMinimizesActiveWindow)
+            #expect(Preferences(defaults: defaults).style == .liquidGlass)
+        }
     }
 }

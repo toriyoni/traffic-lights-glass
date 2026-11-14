@@ -35,8 +35,6 @@ enum AppString: String, CaseIterable {
     case followSystemGlassTransparency = "appearance.liquid_glass.follow_system_transparency"
     case followSystemGlassTransparencyHelp = "appearance.liquid_glass.follow_system_transparency.help"
     case glassGroupRevealHelp = "hidden_traffic_lights.glass_group.help"
-    case appearanceMacOS = "appearance.macos"
-    case appearanceEdgeSquares = "appearance.edge_squares"
     case buttonSize = "button.size"
     case restoreDefault = "button.restore_default"
     case buttonSpacing = "button.spacing"

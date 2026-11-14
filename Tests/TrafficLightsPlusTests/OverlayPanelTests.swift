@@ -324,7 +324,7 @@ import Testing
 
 @Test func symbolRectUsesAnimatedBoundsInsteadOfConfiguredControlSize() throws {
     let compactBounds = NSRect(x: 0, y: 0, width: 14, height: 14)
-    let symbolRect = try #require(OverlayButtonView.symbolRect(in: compactBounds, style: .macOS))
+    let symbolRect = try #require(OverlayButtonView.symbolRect(in: compactBounds))
 
     #expect(symbolRect.minX.isFinite)
     #expect(symbolRect.minY.isFinite)
@@ -404,10 +404,8 @@ import Testing
 }
 
 @MainActor
-@Test(arguments: [ControlStyle.macOS, .liquidGlass])
-func overlayRequiresOneMatchingPressPerAction(style: ControlStyle) throws {
+@Test func overlayRequiresOneMatchingPressPerAction() throws {
     let panel = OverlayPanel(action: .minimize)
-    panel.overlayView.style = style
     panel.setFrame(NSRect(x: 0, y: 0, width: 28, height: 28), display: false)
     var actionCount = 0
     panel.overlayView.actionHandler = { _ in actionCount += 1 }
@@ -437,7 +435,6 @@ func overlayRequiresOneMatchingPressPerAction(style: ControlStyle) throws {
           !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency else { return }
     let panel = OverlayPanel(action: .close)
     let button = panel.overlayView
-    button.style = .liquidGlass
     button.isWindowActive = true
     let material = try #require(button.subviews.first as? NSGlassEffectView)
     for size: CGFloat in [14, 28, 48, 18] {
@@ -453,8 +450,7 @@ func overlayRequiresOneMatchingPressPerAction(style: ControlStyle) throws {
         #expect(button.hitTest(center) === button)
         button.resetInteractionState()
     }
-    button.style = .macOS
-    #expect(material.superview == nil)
+    #expect(material.superview === button)
     #expect(button.hitTest(NSPoint(x: 9, y: 9)) === button)
     #endif
 }

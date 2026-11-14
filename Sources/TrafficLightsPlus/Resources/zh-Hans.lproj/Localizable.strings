@@ -11,8 +11,6 @@
 "appearance.liquid_glass.follow_system_transparency.help" = "开启时，跟随“系统设置 → 外观 → Liquid Glass”；关闭时，本应用固定使用清透效果。系统的“降低透明度”仍然有效。";
 "hidden_traffic_lights.glass_group.help" = "靠近红绿灯时整组出现，离哪个按钮越近，哪个就越大；移开后平滑缩小并收起。";
 "appearance.title" = "外观";
-"appearance.macos" = "macOS 圆形";
-"appearance.edge_squares" = "左侧贴边方块";
 "button.size" = "按钮大小";
 "button.restore_default" = "恢复默认";
 "button.spacing" = "按钮间距";

@@ -26,7 +26,7 @@ struct ControlLayout {
         action: WindowAction,
         adjustment: CGFloat
     ) -> CGPoint {
-        let index = displayOrder(for: .macOS).firstIndex(of: action) ?? 0
+        let index = displayOrder.firstIndex(of: action) ?? 0
         return CGPoint(
             x: nativeCenter.x + CGFloat(index) * adjustment,
             y: nativeCenter.y
@@ -42,39 +42,7 @@ struct ControlLayout {
         )
     }
 
-    static func frames(
-        style: ControlStyle,
-        controlSize: CGFloat,
-        windowOrigin: CGPoint,
-        windowSize: CGSize
-    ) -> [WindowAction: CGRect] {
-        let buttonWidth = controlSize
-        let gap: CGFloat = style == .edgeSquares ? 0 : 8
-        let topInset: CGFloat = style == .edgeSquares ? 0 : 4
-        let left: CGFloat
-
-        switch style {
-        case .liquidGlass, .macOS:
-            left = windowOrigin.x + 12
-        case .edgeSquares:
-            left = windowOrigin.x
-        }
-
-        return Dictionary(uniqueKeysWithValues: displayOrder(for: style).enumerated().map { index, action in
-            let spacing = buttonWidth + gap
-            let frame = CGRect(
-                x: left + CGFloat(index) * spacing,
-                y: windowOrigin.y + topInset,
-                width: buttonWidth,
-                height: controlSize
-            )
-            return (action, frame)
-        })
-    }
-
-    static func displayOrder(for style: ControlStyle) -> [WindowAction] {
-        [.close, .minimize, .zoom]
-    }
+    static let displayOrder: [WindowAction] = [.close, .minimize, .zoom]
 
     static func unobscuredActions(
         controlFrames: [WindowAction: CGRect],
@@ -135,7 +103,7 @@ struct ControlLayout {
         currentAction: WindowAction?,
         hysteresis: CGFloat = 4
     ) -> WindowAction? {
-        let orderedActions = displayOrder(for: .macOS).filter { actions.contains($0) }
+        let orderedActions = displayOrder.filter { actions.contains($0) }
         let scored = orderedActions.compactMap { action -> (WindowAction, CGFloat, Bool)? in
             guard let frame = controlFrames[action] else { return nil }
             let distance = hypot(point.x - frame.midX, point.y - frame.midY)
@@ -183,5 +151,4 @@ struct ControlLayout {
             ).map { Set([$0]) } ?? []
         }
     }
-
 }

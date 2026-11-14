@@ -41,19 +41,26 @@ struct ZoomMenuPlacement {
         return path.copy(using: &flip)!
     }
 
-    func containsInteraction(_ point: CGPoint, source: CGRect, sourceIsCircular: Bool = true) -> Bool {
-        if sourceIsCircular ? GlassGroupLayout.contains(point, in: source) : source.contains(point) { return true }
-        if path.contains(CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)) { return true }
-        // Retain only the direct route from the green light into the menu.
-        // A rectangle spanning both windows also included other lights and
-        // large empty areas, making the menu linger after the pointer left.
+    func containsMenu(_ point: CGPoint) -> Bool {
+        path.contains(CGPoint(x: point.x - frame.minX, y: point.y - frame.minY))
+    }
+
+    func containsMenuEdge(_ point: CGPoint, padding: CGFloat) -> Bool {
+        path.copy(strokingWithWidth: padding * 2, lineCap: .round, lineJoin: .round, miterLimit: 1)
+            .contains(CGPoint(x: point.x - frame.minX, y: point.y - frame.minY))
+    }
+
+    func containsApproach(_ point: CGPoint, source: CGRect) -> Bool {
+        // A broad funnel permits diagonal entry anywhere along the near menu
+        // edge. Direction and a finite deadline limit its lifetime; other
+        // traffic-light hit targets are explicitly excluded by the owner.
         let edgeY = belowAnchor ? frame.maxY - Self.arrowHeight : frame.minY + Self.arrowHeight
+        let startY = source.midY + (belowAnchor ? 4 : -4)
         let corridor = CGMutablePath()
-        corridor.move(to: CGPoint(x: source.midX, y: source.midY))
-        // Connect to the arrow's base, not the entire menu width. At the right
-        // screen edge a wide fan could otherwise cover the yellow/red lights.
-        corridor.addLine(to: CGPoint(x: frame.minX + arrowX - 10, y: edgeY))
-        corridor.addLine(to: CGPoint(x: frame.minX + arrowX + 10, y: edgeY))
+        corridor.move(to: CGPoint(x: source.minX - 6, y: startY))
+        corridor.addLine(to: CGPoint(x: source.maxX + 6, y: startY))
+        corridor.addLine(to: CGPoint(x: frame.maxX + 6, y: edgeY))
+        corridor.addLine(to: CGPoint(x: frame.minX - 6, y: edgeY))
         corridor.closeSubpath()
         return corridor.contains(point)
     }
@@ -66,7 +73,8 @@ final class ZoomMenuPanel: NSPanel {
     var onCommand: ((WindowMenuCommand) -> Void)?
     var onDismiss: (() -> Void)?
     var sourceFrameProvider: (() -> CGRect?)?
-    var sourceIsCircular = true
+    var otherControlsContain: ((CGPoint) -> Bool)?
+    var pointerLocation: () -> CGPoint = { NSEvent.mouseLocation }
     let anchorFrame: CGRect
     let placement: ZoomMenuPlacement
     private let snapshot: WindowMenuSnapshot
@@ -74,6 +82,9 @@ final class ZoomMenuPanel: NSPanel {
     private var firstRow: [WindowLayoutButton] = []
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var hoverProtection = ZoomMenuHoverProtection()
+    private var protectionExpiry: DispatchWorkItem?
+    private var scheduledProtectionDeadline: TimeInterval?
 
     init(anchor: CGRect, visibleScreen: CGRect, snapshot: WindowMenuSnapshot, language: AppLanguage, appearance: NSAppearance?) {
         anchorFrame = anchor
@@ -139,11 +150,13 @@ final class ZoomMenuPanel: NSPanel {
     @objc(_hasActiveAppearance) private func glassHasActiveAppearance() -> Bool { true }
 
     deinit {
+        protectionExpiry?.cancel()
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
     }
 
     func present() {
+        hoverProtection.reset(at: pointerLocation())
         updateOptionKey(NSEvent.modifierFlags.contains(.option))
         updateMousePassThrough()
         orderFrontRegardless()
@@ -156,6 +169,7 @@ final class ZoomMenuPanel: NSPanel {
     }
 
     func dismiss() {
+        cancelProtectionExpiry()
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor); self.globalMonitor = nil }
         if let localMonitor { NSEvent.removeMonitor(localMonitor); self.localMonitor = nil }
         let wasVisible = isVisible
@@ -169,7 +183,7 @@ final class ZoomMenuPanel: NSPanel {
         case .flagsChanged:
             updateOptionKey(event.modifierFlags.contains(.option))
         case .mouseMoved:
-            updatePointerLocation(NSEvent.mouseLocation)
+            updatePointerLocation(pointerLocation())
         case .keyDown:
             dismiss()
         case .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel:
@@ -181,18 +195,42 @@ final class ZoomMenuPanel: NSPanel {
     private func updateMousePassThrough() {
         // The window reserves clear space for the native shadow. That space
         // must not intercept clicks on the green button underneath it.
-        ignoresMouseEvents = !receivesMouse(at: NSEvent.mouseLocation)
+        ignoresMouseEvents = !receivesMouse(at: pointerLocation())
     }
 
     func updatePointerLocation(_ point: CGPoint) {
         guard isVisible else { return }
         ignoresMouseEvents = !receivesMouse(at: point)
         let source = sourceFrameProvider?() ?? anchorFrame
-        if !placement.containsInteraction(point, source: source, sourceIsCircular: sourceIsCircular) { dismiss() }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard hoverProtection.retain(at: point, source: source, placement: placement,
+            overOtherControl: otherControlsContain?(point) == true, now: now) else {
+            dismiss()
+            return
+        }
+        guard let deadline = hoverProtection.deadline else {
+            cancelProtectionExpiry()
+            return
+        }
+        guard scheduledProtectionDeadline != deadline else { return }
+        cancelProtectionExpiry()
+        scheduledProtectionDeadline = deadline
+        let expiry = DispatchWorkItem { [weak self] in
+            guard let self, self.isVisible, self.scheduledProtectionDeadline == deadline else { return }
+            self.updatePointerLocation(self.pointerLocation())
+        }
+        protectionExpiry = expiry
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, deadline - now), execute: expiry)
+    }
+
+    private func cancelProtectionExpiry() {
+        protectionExpiry?.cancel()
+        protectionExpiry = nil
+        scheduledProtectionDeadline = nil
     }
 
     func receivesMouse(at screenPoint: CGPoint) -> Bool {
-        placement.path.contains(CGPoint(x: screenPoint.x - placement.frame.minX, y: screenPoint.y - placement.frame.minY))
+        placement.containsMenu(screenPoint)
     }
 
     private func makeControls(in view: NSView) {

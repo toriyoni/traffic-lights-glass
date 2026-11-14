@@ -40,7 +40,6 @@ final class GlassGroupPanel: NSPanel {
         pointerLightView.wantsLayer = true
 
         for view in buttonViews.values {
-            view.style = .liquidGlass
             buttonContentView.addSubview(view)
             view.interactionContains = { [weak buttonContentView, weak view] point in
                 guard let buttonContentView, let view else { return false }

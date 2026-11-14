@@ -2,14 +2,10 @@ import Foundation
 
 enum ControlStyle: String, CaseIterable {
     case liquidGlass
-    case macOS
-    case edgeSquares
 
     func title(language: AppLanguage) -> String {
         switch self {
         case .liquidGlass: return AppLocalization.string(.appearanceLiquidGlass, language: language)
-        case .macOS: return AppLocalization.string(.appearanceMacOS, language: language)
-        case .edgeSquares: return AppLocalization.string(.appearanceEdgeSquares, language: language)
         }
     }
 }
@@ -77,9 +73,7 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(spacing, forKey: Key.spacing) }
     }
 
-    @Published var style: ControlStyle {
-        didSet { defaults.set(style.rawValue, forKey: Key.style) }
-    }
+    let style = ControlStyle.liquidGlass
 
     @Published var followSystemGlassTransparency: Bool {
         didSet { defaults.set(followSystemGlassTransparency, forKey: Key.followSystemGlassTransparency) }
@@ -158,7 +152,8 @@ final class Preferences: ObservableObject {
         enabled = defaults.bool(forKey: Key.enabled)
         size = Double(ControlLayout.effectiveSize(preferred: defaults.double(forKey: Key.size)))
         spacing = Double(ControlLayout.effectiveSpacingAdjustment(preferred: defaults.double(forKey: Key.spacing)))
-        style = ControlStyle(rawValue: defaults.string(forKey: Key.style) ?? "") ?? .liquidGlass
+        // Migrate retired appearances without changing unrelated preferences.
+        defaults.set(ControlStyle.liquidGlass.rawValue, forKey: Key.style)
         followSystemGlassTransparency = defaults.bool(forKey: Key.followSystemGlassTransparency)
         hiddenTrafficLightsEnabled = defaults.bool(forKey: Key.hiddenTrafficLightsEnabled)
         hiddenTrafficLightRevealMode = HiddenTrafficLightRevealMode(
@@ -176,10 +171,9 @@ final class Preferences: ObservableObject {
         persistApplicationRules()
     }
 
-    // Preserve the user's classic-mode choice while keeping the glass capsule
-    // as a single interaction target.
+    // Retain the old stored reveal choice for rollback; glass is always grouped.
     var effectiveHiddenTrafficLightRevealMode: HiddenTrafficLightRevealMode {
-        style == .liquidGlass ? .group : hiddenTrafficLightRevealMode
+        .group
     }
 
     func behavior(for action: WindowAction) -> ButtonBehavior {
