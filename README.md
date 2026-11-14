@@ -1,6 +1,6 @@
 # Traffic Lights Glass
 
-给 macOS 窗口红绿灯加上一块原生液态玻璃胶囊，让按钮更容易指向，同时保留轻巧的悬停反馈。
+让 macOS 窗口红绿灯顺着你的指针动起来。原生液态玻璃、恰到好处的放大，还有每次划过时轻巧、连贯的回应。
 
 [![CI](https://github.com/toriyoni/traffic-lights-glass/actions/workflows/ci.yml/badge.svg)](https://github.com/toriyoni/traffic-lights-glass/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/toriyoni/traffic-lights-glass)](https://github.com/toriyoni/traffic-lights-glass/releases/latest)
@@ -8,14 +8,41 @@
 
 [下载最新版 / Download](https://github.com/toriyoni/traffic-lights-glass/releases/latest) · [发行说明](docs/releases/1.0.0.md) · [隐私说明](PRIVACY.md) · [构建与发行](BUILD-LIQUID-GLASS.md)
 
-## 功能
+## 指到哪里，哪里回应
 
-- 系统原生玻璃胶囊与彩色按钮，带折射、边缘高光和随指针移动的柔光。
-- 只放大当前悬停的灯，轻微向指针吸附；胶囊平滑伸展，动画先快后慢、没有回弹。
-- 三个灯之间连续命中，胶囊两端与红绿灯同心。
-- 在绿灯上停留后显示固定位置的窗口菜单。朝菜单移动时有短暂进入保护，边缘轻微出界可恢复；保护区不拦截其他控件和窗口的点击。
+指向一颗灯，它就轻轻放大、向指针靠近。滑向下一颗时，放大状态自然接续，胶囊也随之伸展。按钮之间保留视觉上的留白，横向移动时的响应却是连续的。
+
+![浅色和深色模式下，指针连续划过红黄绿灯：单灯放大、轻微吸附，胶囊平滑伸展](docs/showcase/v1.0.0/flow.gif)
+
+## 轻轻靠近，从容收放
+
+开启隐藏式红绿灯后，胶囊从窗口原本的小按钮位置展开；离开时，轻轻收回。先快后慢的节奏让响应及时，落点平稳，指针更容易跟上按钮的位置。
+
+![指针靠近时从原位展开，离开时平滑收回；演示包含连续进入与离开](docs/showcase/v1.0.0/reveal.gif)
+
+## 一束柔光，跟着指针走
+
+柔和的光照同时落在按钮和胶囊上。靠近边缘时，局部反光随之亮起；轻轻移动，按钮和胶囊也有细微的随动。
+
+![指针在灯内和胶囊边缘移动，柔光跟随，局部边缘反光增强](docs/showcase/v1.0.0/light.gif)
+
+## 浅色或深色，都自然融入
+
+玻璃材质与彩色按钮适应浅色、深色外观。透明度默认跟随系统 Liquid Glass 设置，也可以在应用中固定为清透效果。
+
+![浅色和深色外观中的原生液态玻璃胶囊、彩色按钮和边缘高光](docs/showcase/v1.0.0/appearance.png)
+
+停在绿灯上，窗口菜单会出现在绿灯旁。朝菜单移动时留有进入余量，菜单位置保持稳定，方便接着选择窗口布局。
+
+![浅色和深色的窗口布局菜单，箭头对齐放大的绿灯](docs/showcase/v1.0.0/window-menu.png)
+
+<sub>以上素材来自 v1.0.0 原生组件在 macOS 27.2.1 上的本机录制，使用预设指针轨迹；GIF 以 50 帧/秒、1× 原速播放。演示按钮尺寸为 36 pt，可在设置中调整。菜单可用项依目标应用而定。[素材与录制说明](docs/showcase/README.md)</sub>
+
+## 更多功能
+
 - 应用名单设置优先于全局开关，可单独禁用某个应用的红绿灯放大。
-- “透明度跟随系统”默认开启；关闭后本应用保持清透，系统“降低透明度”仍有效。
+- 菜单支持系统可用的平铺、排列和全屏操作；进入保护不拦截其他控件和窗口的点击。
+- “透明度跟随系统”默认开启，系统“降低透明度”辅助功能仍有效。
 - 按钮大小 18–48 pt、独立按钮动作、隐藏式红绿灯、Dock 点击最小化、台前调度关闭按钮。
 - 简体中文与英文界面；软件更新直接连接本仓库的 GitHub Releases。
 
@@ -66,6 +93,8 @@ open "build/Traffic Lights Glass.app"
 ## English
 
 Traffic Lights Glass enlarges macOS window controls inside a native Liquid Glass capsule. It provides independent button magnification, subtle pointer attraction, pointer lighting, an anchored window-layout menu, per-app overrides, and a switch to follow the system glass appearance.
+
+The previews above show the native v1.0.0 components in light and dark appearances: continuous hover transitions, gentle expansion and return, and light that follows the pointer. Recorded on macOS 27.2.1 with scripted pointer paths and 36 pt controls; GIFs play at their original speed at 50 fps.
 
 Download **arm64** for Apple Silicon or **x86_64** for Intel from [Releases](https://github.com/toriyoni/traffic-lights-glass/releases/latest). Move the app into Applications and grant Accessibility access. macOS 13+ is required; native Liquid Glass requires macOS 26+.
 

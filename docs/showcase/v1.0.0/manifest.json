@@ -1,0 +1,59 @@
+{
+  "source_tag": "v1.0.0",
+  "source_commit": "0c11bd8ff34e830d312e4aaeb4369b27e5e381f6",
+  "recorded_at": "2026-11-14T20:18:26+08:00",
+  "macos": "27.2.1",
+  "sdk": "26.5",
+  "architecture": "arm64",
+  "control_size_pt": 36,
+  "capture": "Native production views; scripted pointer input; no system mouse events",
+  "assets": [
+    {
+      "file": "appearance.png",
+      "bytes": 352868,
+      "sha256": "8abbb5fa436f59e838e5d27e9460febb3aa54063bc72461fc08cbf55e1955ff7",
+      "width": 1680,
+      "height": 660
+    },
+    {
+      "file": "flow.gif",
+      "bytes": 1350297,
+      "sha256": "1e47ba1f40a7ad4d0674c1bc2efd59b89d425cd2d0aaec9d16c28fff9c33af38",
+      "width": 840,
+      "height": 330,
+      "frames": 380,
+      "fps": 50,
+      "seconds": 7.6,
+      "playback_speed": 1
+    },
+    {
+      "file": "light.gif",
+      "bytes": 1230838,
+      "sha256": "2fe1644184e72dd27836159de6112c92979c4456c988b18e65791a68ad8fac8f",
+      "width": 840,
+      "height": 330,
+      "frames": 380,
+      "fps": 50,
+      "seconds": 7.6,
+      "playback_speed": 1
+    },
+    {
+      "file": "reveal.gif",
+      "bytes": 850186,
+      "sha256": "46b0953a81491d1c7def9d8577d40f1b0e543c837a0c88f97cfa9547334b8af2",
+      "width": 840,
+      "height": 330,
+      "frames": 380,
+      "fps": 50,
+      "seconds": 7.6,
+      "playback_speed": 1
+    },
+    {
+      "file": "window-menu.png",
+      "bytes": 723616,
+      "sha256": "495a2e62ed5216c9381ef7f0e800d125d2cc366995284b2ce1c01eab957a5003",
+      "width": 1680,
+      "height": 1120
+    }
+  ]
+}
